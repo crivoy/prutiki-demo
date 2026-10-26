@@ -1,0 +1,27 @@
+{
+ "res": 2048,
+ "spp": 1024,
+ "denoise": "oidn",
+ "rooms": {
+  "zal": {
+   "img": "lm_zal.webp",
+   "S": 1.9820001125335693
+  },
+  "hall": {
+   "img": "lm_hall.webp",
+   "S": 3.5287368297576904
+  },
+  "cab": {
+   "img": "lm_cab.webp",
+   "S": 3.9782633781433105
+  },
+  "kit": {
+   "img": "lm_kit.webp",
+   "S": 2.6057372093200684
+  },
+  "balc": {
+   "img": "lm_balc.webp",
+   "S": 3.5409016609191895
+  }
+ }
+}
