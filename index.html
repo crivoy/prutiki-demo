@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="ru">
+<head><meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<link rel="preload" href="coin_token.webp" as="image" type="image/webp">   <!-- монета на главной кнопке — с первого кадра (фон из стиля ui.js иначе грузится последним; Poki: старт раньше) -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прутики</title>
+<script>   // ключи отладки (?dev, ?staff, ?spin, ?lvl, ?case …) — только дома и в локальной сети: у игрока (Яндекс) вырезаются из адреса до загрузки игры, ?lang остаётся
+if (!/^(localhost|127\.|192\.168\.|10\.|100\.)|\.local$/.test(location.hostname)) { const q = new URLSearchParams(location.search), D = ['dev', 'staff', 'spin', 'replay', 'case', 'pose', 'lvl', 'press', 'head', 'cam', 'speed', 'hud', 'nowarm', 'box', 'style', 'floor', 'hm'];
+  if (D.some(k => q.has(k))) { D.forEach(k => q.delete(k)); history.replaceState(null, '', location.pathname + (q.size ? '?' + q : '') + location.hash); } }
+</script>
+<style>
+  :root { --bg: #2a1824; --panel: rgba(14, 12, 24, 0.78); --line: rgba(255, 255, 255, 0.12); --text: #ece9f6; --dim: #a39fb8; --acc: #ff4fa3; --acc2: #39d7ff; --ok: #6dff9c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.35 -apple-system, "SF Pro Text", "Segoe UI", sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 12px; left: 12px; width: 290px; max-width: calc(100vw - 24px); padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(8px); }
+  #hud h1 { margin: 0 0 8px; font-size: 15px; letter-spacing: .02em; }
+  #hud .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; align-items: center; }
+  #hud label { color: var(--dim); font-size: 12px; }
+  select, button.s { background: #1c1930; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; cursor: pointer; }
+  button.s:hover, select:hover { border-color: var(--acc2); }
+  #state { font-size: 16px; font-weight: 600; color: var(--acc2); margin-top: 8px; }
+  #info { color: var(--dim); font-size: 12px; white-space: pre-line; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  #pads { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; padding: 12px 20px 14px; border-radius: 30px;   /* пульт автомата: две кнопки рядом */
+          background: linear-gradient(#ffc2cf, #ff9cb2); box-shadow: 0 7px 0 #c9607e, 0 16px 30px rgba(20, 6, 14, .5), inset 0 2px 0 rgba(255, 255, 255, .65); }
+  .pad { position: relative; width: 84px; height: 84px; border-radius: 50%; border: 5px solid #fff6ef; cursor: pointer; padding: 0; touch-action: none; user-select: none; -webkit-user-select: none;
+         box-shadow: 0 7px 0 var(--rim), 0 0 22px var(--glow), inset 0 -10px 16px rgba(0,0,0,.22), inset 0 8px 12px rgba(255,255,255,.45); transition: transform .05s, filter .15s, box-shadow .05s; }
+  .pad svg { width: 50%; height: 50%; display: block; margin: auto; filter: drop-shadow(0 2px 0 rgba(0,0,0,.25)); }
+  #b1 { background: radial-gradient(circle at 50% 32%, #ff9ac2, #ef2f7a 70%); --rim: #a8174f; --glow: rgba(255, 79, 163, .5); }
+  #b0 { background: radial-gradient(circle at 50% 32%, #ffe08a, #e8a417 70%); --rim: #a06a08; --glow: rgba(255, 200, 60, .5); }   /* жетон (пользователь 23.10 через 3f: ход в 3 шага) — облик у 3f */
+  #b2 { background: radial-gradient(circle at 50% 32%, #9df0ff, #13a8d6 70%); --rim: #0b6f90; --glow: rgba(57, 215, 255, .5); }
+  #b2 svg { transform: rotate(-90deg); }
+  .pad:disabled { filter: grayscale(.8) brightness(.7); cursor: default; box-shadow: 0 7px 0 var(--rim), inset 0 -10px 16px rgba(0,0,0,.22); }
+  .pad.on { transform: translateY(6px); box-shadow: 0 1px 0 var(--rim), 0 0 34px var(--glow), inset 0 -4px 12px rgba(0,0,0,.3); }
+  #win { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%); font: 800 52px/1 inherit; color: var(--ok); text-shadow: 0 0 30px rgba(109,255,156,.7); display: none; pointer-events: none; text-align: center; }
+  #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; color: #ffb3b3; font-size: 15px; text-align: center; white-space: pre-wrap; }
+  #keys { position: fixed; right: 14px; bottom: 14px; color: var(--dim); font-size: 12px; text-align: right; }
+  @media (max-width: 560px) { #hud { width: auto; right: 12px; } #keys { display: none; } .pad { width: 76px; height: 76px; } }
+  #hud { max-height: calc(100vh - 150px); overflow-y: auto; }
+  #cfg summary { cursor: pointer; color: var(--acc2); font-size: 13px; margin: 8px 0 4px; }
+  #cfg select { max-width: 190px; }
+  .sl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; margin: 5px 0; }
+  .sl label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sl input { grid-column: 1 / 3; width: 100%; accent-color: var(--acc); }
+</style>
+<link href="./fonts/e3dfe5eb.css" rel="stylesheet">
+<script>window.SITE = "poki"</script><script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three@0.170.0/build/three.module.js", "three/addons/": "./vendor/three@0.170.0/examples/jsm/" } }
+</script>
+<script src="drive.js"></script>
+<script src="machines.js"></script>
+<script src="hint_table.js"></script>
+<script src="assist_table.js"></script>
+<script src="tutor_table.js"></script>
+<script src="claw_geo.js"></script>
+</head>
+<body>
+<!-- экран загрузки (сборка; выбор пользователя 23.10 — «Табло», стенд style_lab/loading.html v=1): рисуется сразу, до модулей; гасит ui.js — window.bootDone() рядом с P.ready() -->
+<style>
+  #boot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px; padding: 24px; color: #fff; font: 800 16px/1.2 "M PLUS Rounded 1c", sans-serif; -webkit-user-select: none; user-select: none; transition: opacity .45s;
+          background: radial-gradient(ellipse 60% 45% at 50% 38%, #ff6fa71c, #0000 70%), linear-gradient(#16233a 0 58%, #0d1424 58% 100%); }
+  #boot::after { content: ""; position: absolute; left: 0; right: 0; top: 58%; height: 2px; background: #ffffff10; }
+  #boot h1 { position: relative; z-index: 1; margin: 0; font-size: 64px; line-height: 1; text-align: center; text-shadow: 0 3px 0 #a3104b, 0 6px 0 #5a0828, 0 12px 18px #000b; }
+  #boot h1 small { display: block; margin-top: 14px; font-size: 15px; font-weight: 500; letter-spacing: .3em; text-transform: uppercase; color: #ffe3f0; text-shadow: 0 1px 3px #000; }
+  #boot .bar { position: relative; z-index: 1; width: min(440px, 80vw); height: 34px; box-sizing: border-box; border-radius: 999px; border: 3px solid #22232b; background: #141a28; padding: 3px; overflow: hidden; box-shadow: 0 0 0 3px #c9cdd6, 0 0 0 4px #5d616c, 0 6px 0 4px #34363e, 0 12px 18px 4px #000a, inset 0 3px 8px #000c; }
+  #boot .bar i { display: block; height: 100%; width: var(--p, 0%); border-radius: 999px; background: linear-gradient(#ffb3d2, #ff3f8e 55%, #c2185b); box-shadow: inset 0 2px 2px #fff8, 0 0 12px #ff3f8e88; transition: width .2s; }
+  #boot .pct { position: relative; z-index: 1; font-size: 15px; font-weight: 500; color: #ffe3f0; min-height: 1.2em; }
+  #boot .tip { position: absolute; left: 24px; right: 24px; bottom: max(28px, env(safe-area-inset-bottom)); z-index: 1; text-align: center; font-weight: 500; font-size: 15px; color: #c9d6ee; opacity: .85; }
+  @media (max-width: 600px) { #boot h1 { font-size: 52px; } #boot h1 small { font-size: 13px; } }
+</style>
+<div id="boot"><h1 id="boot-t">Прутики<small>призовые автоматы</small></h1><div class="bar"><i></i></div><div class="pct" id="boot-p"></div><div class="tip" id="boot-tip">Держи кнопку — лапа едет, отпусти — встанет</div></div>
+<script>
+{ const b = document.getElementById('boot'), ru = /^(ru|be|kk|uk|uz)/i.test(navigator.language), L = ru ? 'Загрузка' : 'Loading'; let p = 0;   // язык до SDK — по браузеру (запасной ru для СНГ, как в ui.js)
+  if (/[?&](dev|replay)\b/.test(location.search)) b.remove();   // отладка — без заставки
+  if (!ru) { document.title = 'Prutiki'; document.getElementById('boot-t').innerHTML = 'Prutiki<small>prize machines</small>'; document.getElementById('boot-tip').textContent = 'Hold the button — the claw moves, release — it stops'; }
+  const t = () => { if (!b.isConnected || b.dataset.done || b.dataset.fail) return; p += (95 - p) * 0.012; b.style.setProperty('--p', p + '%'); document.getElementById('boot-p').textContent = `${L} ${Math.floor(p)}%`; requestAnimationFrame(t); }; t();   // ponytail: полоса — по времени, к 95 %; настоящий прогресс — если загрузка станет долгой
+  window.bootDone = () => { if (!b.isConnected) return; b.dataset.done = 1; b.style.pointerEvents = 'none';   // играть можно с ready (Яндекс 1.19.2) — заставка только догасает
+   b.style.setProperty('--p', '100%'); document.getElementById('boot-p').textContent = ru ? 'Готово' : 'Ready'; setTimeout(() => { b.style.opacity = 0; setTimeout(() => b.remove(), 500); }, 250); };
+  const ss = (k, v) => { try { return v === undefined ? sessionStorage.getItem(k) : v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (_) {} };
+  const fail = auto => { if (!b.isConnected || b.dataset.done || b.dataset.fail) return; const n = +(ss('bootTry') || 0);   // не загрузилось (boxiki-93 25.10: обрыв на series.js — «94 %» навсегда): свой скрипт не пришёл — перезагрузка до 2 раз (повтор запросов), потом кнопка
+    if (auto && n < 2) { ss('bootTry', n + 1); return location.reload(); }
+    b.dataset.fail = 1; const P = document.getElementById('boot-p'); P.textContent = ru ? 'Не удалось загрузить' : 'Could not load the game';
+    P.append(Object.assign(document.createElement('button'), { textContent: ru ? 'Обновить' : 'Reload', onclick: () => { ss('bootTry', null); location.reload(); }, style: 'display:block;margin:12px auto 0;height:44px;padding:0 22px;border:0;border-radius:22px;background:#ff4f9a;color:#fff;font:800 16px/1 sans-serif;cursor:pointer' })); };
+  addEventListener('error', e => { const el = e.target; if (el instanceof HTMLScriptElement && (!el.src || el.src.startsWith(location.origin))) fail(true); }, true);   // реклама/SDK площадки с чужого адреса — не в счёт
+  setTimeout(() => fail(false), 90e3);   // ponytail: 90 с без старта — кнопка (Slow 4G стартует за 32 с), загрузка идёт дальше: пришла — заставка гаснет как обычно
+  const done0 = window.bootDone; window.bootDone = () => { ss('bootTry', null); done0(); }; }
+</script>
+<div id="hud">
+  <h1>2hsq · мост · физика сима</h1>
+  <div class="row"><label>мир</label>
+    <select id="preset"><option value="225">как ход 225 (μ прутков 0.45, руки 0.2 Н·м, ツメ 0.8)</option><option value="216">как ход 216 (μ прутков 0.45, руки 1 Н·м, ツメ 0.8)</option></select></div>
+  <div class="row"><button class="s" id="reset">Новая коробка</button><button class="s" id="hint" hidden>Подсказка</button></div>
+  <div class="row"><label>камера</label><select id="cam"><option value="video">как на видео</option><option value="free">свободная</option><option value="front">спереди</option><option value="top">сверху</option><option value="side">сбоку</option></select>
+    <label>скорость</label><select id="speed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></div>
+  <div class="row"><label>упор, Н</label><input id="press" type="range" min="0" max="60" step="1" value="0" style="width:140px"><span id="pressv">выкл</span></div>
+  <div class="row"><label>голова, °</label><input id="headmax" type="range" min="1" max="31" step="0.5" value="31" style="width:140px"><span id="headmaxv">как в зале</span></div>
+  <div class="row"><label><input type="checkbox" id="hold" checked> коробка стоит до подъёма (как в симе)</label></div>
+  <details id="bpose"><summary>поза коробки — выставить самому</summary>
+    <div class="row"><label><input type="checkbox" id="bp_hold"> держать в позе ползунков (снять — коробка падает)</label></div>
+    <div id="bp_sl"></div>
+    <div class="row"><button class="s" id="bp_get">взять текущую</button><button class="s" id="bp_keep">ставить при «Новая коробка»</button><button class="s" id="bp_copy">копировать</button></div>
+    <div class="row"><label id="bp_txt" style="user-select: all; word-break: break-all"></label></div></details>
+  <details id="cfg"><summary>настройки автомата</summary>
+    <div class="row"><label>уровень</label><select id="mach"></select></div>
+    <div class="row"><label>пол зала</label><select id="floor"></select></div>
+    <div class="row"><label id="about"></label></div>
+    <div class="row"><label>коробка</label><select id="boxsel"></select></div>
+    <div class="sl"><label>сила рук</label><label><b id="v_armt"></b></label><input type="range" id="armt" min="0.05" max="0.6" step="0.01"></div>
+    <div class="sl"><label>щель опорных (между осями)</label><label><b id="v_gap"></b></label><input type="range" id="gap" min="0.08" max="0.24" step="0.0025"></div>
+    <div class="sl"><label>наружные выше опорных</label><label><b id="v_oh"></b></label><input type="range" id="oh" min="0" max="0.08" step="0.0025"></div>
+    <div class="sl"><label>передний наружный: вынос</label><label><b id="v_off0"></b></label><input type="range" id="off0" min="0.03" max="0.16" step="0.0025"></div>
+    <div class="sl"><label>задний наружный: вынос</label><label><b id="v_off3"></b></label><input type="range" id="off3" min="0.03" max="0.16" step="0.0025"></div>
+    <div class="sl"><label>скос задней пары (ハの字)</label><label><b id="v_skew"></b></label><input type="range" id="skew" min="-10" max="10" step="1"></div>
+    <div class="sl"><label>старт головы над прутками</label><label><b id="v_top"></b></label><input type="range" id="top" min="0.4" max="0.75" step="0.01"></div>
+    <div class="sl"><label>нижний предел головы</label><label><b id="v_zmin"></b></label><input type="range" id="zmin" min="0.04" max="0.3" step="0.005"></div>
+    <div class="sl"><label>скорость спуска</label><label><b id="v_vdrop"></b></label><input type="range" id="vdrop" min="0.06" max="0.4" step="0.01"></div>
+    <div class="row"><label><input type="checkbox" id="twist"> поворот головы при спуске (ねじれ, ±10°)</label></div>
+    <div class="sl"><label>скорость поворота головы (до)</label><label><b id="v_tvel"></b></label><input type="range" id="tvel" min="2" max="60" step="1"></div>
+    <div class="row"><label><input type="checkbox" id="mech"> механика лапы: голова на маятнике, спуск до касания руки, руки — пружина, резина цепкая</label></div>
+    <div class="row"><label><input type="checkbox" id="lift" checked> LIFT ACTION: в начале подъёма руки сжимают сильнее</label></div>
+  </details>
+  <div id="state">загрузка…</div>
+  <div id="info"></div>
+</div>
+<div id="pads"><button class="pad" id="b0" disabled aria-label="жетон"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M12 7.5v9" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></button><button class="pad" id="b1" disabled aria-label="1 — вправо"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h10V4.5l8.5 7.5-8.5 7.5v-5H3z" fill="#fff"/></svg></button><button class="pad" id="b2" disabled aria-label="2 — вглубь"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h10V4.5l8.5 7.5-8.5 7.5v-5H3z" fill="#fff"/></svg></button></div>
+<div id="win">ПРИЗ!</div>
+<div id="keys">держать: → или 1 — вправо, ↑ или 2 — вглубь<br>мышь: тянуть — крутить, колесо — ближе/дальше, правая кнопка — сдвиг</div>
+<div id="err"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as HS from './hall_style.js';                      // облик: стиль A «Тёплый зал» (материалы, корпус, зал, свет, голова, печать коробки)
+import { Home } from './home.js';
+import { P } from './platform.js';                       // язык площадки P.lang (тот же модуль, что у ui.js)                           // квартира-коллекция в этой же вкладке (фрейм поверх, переключение без перезагрузки)
+import './ui.js';                                           // экраны игры (сборка): меню = зал, экран автомата, жетоны, приз, пауза; сохранения — save.js, жетоны — tokens.js, SDK — platform.js
+import loadMujoco from './vendor/@mujoco/mujoco@3.16.0/mujoco.js';
+
+const $ = id => document.getElementById(id);
+const DEVQ = /[?&]dev\b/.test(location.search), lang = () => { const q = new URLSearchParams(location.search).get('lang'); return q === 'ru' || q === 'en' ? q : P.lang === 'ru' ? 'ru' : 'en'; };   // язык как в ui.js: ?lang, иначе P.lang (до P.init — 'ru')
+const fail = e => { console.error(e); $('err').style.display = 'flex';   // роковая ошибка: игроку — без стека (Яндекс), стек — в консоль и на экран с ?dev
+  $('err').textContent = DEVQ ? 'Ошибка: ' + (e?.stack || e) : lang() === 'en' || !/^(ru|be|kk|uk|uz)/i.test(navigator.language) ? 'Something went wrong. Please reload the page' : 'Что-то пошло не так. Обновите страницу'; };
+window.addEventListener('error', e => DEVQ ? fail(e.error || e.message) : console.error(e.error || e.message));   // не роковые — без оверлея
+
+// --- Правила автомата — Drive.A и Drive.auto (drive.js), настройки — S (пресеты machines.js + ползунки). ponytail: границы хода и место старта не мерены по видео.
+const WIN_Z = -0.10;                                    // центр коробки ниже — провалилась между прутками
+const RIG_Z = 0.96;                                     // рейка каретки: выше головы на старте (старт по эталон до 0.75 + голова 0.106)
+
+// --- Рендер
+THREE.Object3D.DEFAULT_UP.set(0, 0, 1);                 // мир MuJoCo: z вверх, метры
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+const DPR_MAX = Math.min(devicePixelRatio, 1.25); let DPR = DPR_MAX; renderer.setPixelRatio(DPR);   // упор в пиксели (замер boxiki-85 22.10): ретина ×4 — потолок 1.25, при рывках ниже (frame)
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();                        // фон, туман, окружение и свет — HS.hall
+const camera = new THREE.PerspectiveCamera(37, innerWidth / innerHeight, 0.01, 10);
+const PC = !matchMedia('(pointer: coarse)').matches, fit = () => { const w = PC ? Math.min(innerWidth, 2 * innerHeight) : innerWidth;   // поле на ПК не шире 2:1 (Яндекс 1.6.2.2), по бокам — фон
+  renderer.setSize(w, innerHeight); renderer.domElement.style.marginLeft = (innerWidth - w) / 2 + 'px'; camera.aspect = w / innerHeight; }; fit();
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;   // крутить можно из любого вида; вид из меню — начальная точка
+let camFree = false; controls.addEventListener('start', () => { camFree = true; });                 // до первого касания вид «как на видео» держит свой крен
+addEventListener('resize', () => { fit(); if (['video', 'free', 'play'].includes($('cam').value)) camera.fov = vfov(); camera.updateProjectionMatrix(); if (FIT[$('cam').value] && !fly) setCam($('cam').value); });   // поворот телефона — вписать заново
+
+const MAT = HS.MAT;
+const deco = HS.hall(scene, renderer);                                         // зал, корпус автомата, каретка (beam, trolley, cable)
+let TX = 0.42;                                                                  // боковые трубы с хомутами — у концов прутков
+function fitCab(C) { TX = deco.fit(C, S?.id); }                                // корпус и витрина под уровень (M.cab)
+
+// --- Физика
+let mj, m, d, J, st, R, geoms = [], ids = {}, game;
+const world = new THREE.Group(); scene.add(world);
+const loadData = mv => new Promise((ok, no) => { if (window.GAMES?.[mv]) return ok(window.GAMES[mv]);
+  const s = document.createElement('script'); s.src = `${mv}/data.js`; s.onload = () => ok(window.GAMES[mv]); s.onerror = () => no(`нет ${mv}/data.js`); document.head.append(s); });
+
+function buildGeoms() {
+  const keep = new Set(Object.values(MAT));                                                    // пересборка на каждой «новой коробке» — старые геометрии и текстуры коробки освободить
+  world.traverse(o => { if (o.isMesh) { o.geometry.dispose(); [o.material].flat().forEach(mt => { if (!keep.has(mt) && !mt.userData.keep) { mt.map?.dispose(); mt.dispose(); } }); } });   // keep — кэш печати hall_style
+  world.clear(); geoms = [];
+  const c = J.c, pads = new Set(Object.values(c.PADG)), arms = new Set([...c.AG['-1'], ...c.AG['1']]);
+  const T = m.geom_type, GS = m.geom_size, D = m.geom_dataid;   // не S: S — настройки автомата (S.id ниже — печать коробки), локальная S их заслоняла — на любом автомате печатался тюлень
+  const cabG = new Map(['f', 'b', 'l', 'r', 's', 'g', 'dl', 'dr'].map(n => [mj.mj_name2id(m, mj.mjtObj.mjOBJ_GEOM.value, `cab_${n}`), n]).filter(([g]) => g >= 0));
+  for (let g = 0; g < m.ngeom; g++) {
+    const t = T[g], s = [GS[3 * g], GS[3 * g + 1], GS[3 * g + 2]]; let geo, mat;
+    if (t === 0) continue;                                                     // плоскость пола — свой пол корпуса
+    if (t === 6) geo = new THREE.BoxGeometry(2 * s[0], 2 * s[1], 2 * s[2]);
+    else if (t === 3) geo = new THREE.CapsuleGeometry(s[0], 2 * s[1], 8, 24).rotateX(Math.PI / 2);
+    else if (t === 5) geo = new THREE.CylinderGeometry(s[0], s[0], 2 * s[1], 24).rotateX(Math.PI / 2);
+    else if (t === 2) geo = new THREE.SphereGeometry(s[0], 24, 16);
+    else if (t === 7) {
+      const k = D[g], va = m.mesh_vertadr[k], vn = m.mesh_vertnum[k], fa = m.mesh_faceadr[k], fn = m.mesh_facenum[k];
+      geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(m.mesh_vert.slice(3 * va, 3 * (va + vn)), 3));
+      geo.setIndex(Array.from(m.mesh_face.slice(3 * fa, 3 * (fa + fn)))); if (g !== c.HG || CLAW !== '2hsq') geo = geo.toNonIndexed(); geo.computeVertexNormals();   // голова 2hsq — гладкая, голова зала (гранёная) и куски рук — гранями
+    } else continue;
+    if (g === c.GB) mat = S.train ? trainMats([s[0], s[1], s[2]]) : HS.boxMats([s[0], s[1], s[2]], HS.figOf(S.id));        // печать серии с фигуркой автомата; тренировка — пустая коробка
+    else if (cabG.get(g)?.[0] === 'd') continue;                                // дека по бокам шахты — физика, рисует hall_style
+    else if (cabG.has(g)) mat = { s: MAT.shelf, g: MAT.wall }[cabG.get(g)] || MAT.pane;   // корпус зала: лоток витрины, стенка под ним, стёкла
+    else if (c.BARS.includes(g)) mat = MAT.chrome;
+    else if (pads.has(g)) mat = MAT.rubber;
+    else if (arms.has(g) && CLAW !== '2hsq') continue;                          // руки зала — одной гладкой сеткой (armVis ниже): куски физики перекрываются, в полупрозрачном видны «деления»
+    else if (arms.has(g)) mat = MAT.acrylic;
+    else if (g === c.HG) mat = MAT.head;
+    else mat = MAT.glass;                                                      // щиток за прутком 4
+    const o = new THREE.Mesh(geo, mat); o.matrixAutoUpdate = false; o.castShadow = mat !== MAT.glass && mat !== MAT.pane; o.receiveShadow = true; world.add(o); geoms.push([g, o]);
+  }
+  world.add(headDeco());
+  armVis = CLAW === '2hsq' ? [] : ['1', '-1'].map(sd => {                       // руки зала: claw_geo.js vis — в системе тела руки; левая — зеркало по x
+    const V = CLAW_GEO[CLAW].vis, v = Float32Array.from(V.v, (x, i) => i % 3 === 0 && sd === '-1' ? -x : x), f = sd === '-1' ? V.f.map((_, i, a) => a[i - i % 3 + [0, 2, 1][i % 3]]) : V.f;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(v, 3)); geo.setIndex(f); geo.computeVertexNormals();
+    const o = new THREE.Mesh(geo, MAT.acrylic); o.matrixAutoUpdate = false; o.castShadow = o.receiveShadow = true; world.add(o); return [m.geom_bodyid[c.AG[sd][0]], o]; });
+  const P = d.geom_xpos, X = d.geom_xmat, ys = [], TZ = -0.02;                                 // белые хомуты на боковых трубах — под концами прутков (скос и высота из модели)
+  for (const g of c.BARS) { if (P[3 * g + 1] > 2) continue;                                    // пруток убран
+    for (const s of [-1, 1]) { const k = (s * TX - P[3 * g]) / X[9 * g + 2], y = P[3 * g + 1] + k * X[9 * g + 5], z = P[3 * g + 2] + k * X[9 * g + 8], h = z - TZ + 0.013;
+      const o = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.026, h), MAT.clamp); o.position.set(s * TX, y, TZ + h / 2 - 0.006); o.castShadow = o.receiveShadow = true; world.add(o); ys.push(y); } }
+  const y0 = Math.min(...ys) - 0.05, y1 = Math.max(...ys) + 0.05;
+  for (const s of [-1, 1]) { const o = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, y1 - y0, 24), MAT.rail); o.position.set(s * TX, (y0 + y1) / 2, TZ); o.castShadow = o.receiveShadow = true; world.add(o); }   // боковая труба вдоль y
+}
+function headDeco() { return headGroup = HS.headDeco(CLAW); }                 // своя отделка головы: 2hsq или «фонарь» зала
+function snapClaw() {                                                          // лапа на старте — соседям в зале (HS.CLAWS): копии кусков «от головы»; геометрия своя — buildGeoms свою освобождает
+  syncGeoms(); const hb = J.c.hb, P = d.xpos, T = new THREE.Matrix4().makeTranslation(-P[3 * hb], -P[3 * hb + 1], -P[3 * hb + 2]), G = new THREE.Group();
+  const inClaw = g => { for (let b = m.geom_bodyid[g]; b > 0; b = m.body_parentid[b]) if (b === hb) return true; return false; };
+  const add = o => { const c = new THREE.Mesh(o.geometry.clone(), o.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(T, o.matrix); c.castShadow = o.castShadow; c.receiveShadow = true; c.userData.keep = true; G.add(c); };
+  for (const [g, o] of geoms) if (inClaw(g)) add(o);
+  for (const [, o] of armVis) add(o);
+  const hd = HS.headDeco(CLAW); hd.matrix.multiplyMatrices(T, headGroup.matrix); hd.traverse(o => { o.userData.keep = true; }); G.add(hd);
+  return G;
+}
+const HALLS = new Set();                                                        // залы с посчитанным покоем
+function restHall(hall, last) {                                                 // покой всех автоматов зала (коробка после settle, голова, лапа на старте) — соседи рисуются ровно такими, подмена при перелёте не видна
+  HALLS.add(hall);
+  for (const X of MACHINES.filter(x => x.hall === hall).sort((a, b) => (a.arm === last) - (b.arm === last))) {   // руки выбранного — последними: меньше компиляций
+    restOne(X);
+    if (!HS.CLAWS[CLAW]) { buildGeoms(); HS.CLAWS[CLAW] = snapClaw(); }
+  }
+}
+function restOne(X) {                                                            // покой одного автомата (коробка — из Save.bpose, если есть; лапа на старте) — для соседа
+  pick(X.id, X.box, false); const g = J.c.GB, P = d.geom_xpos, R = d.geom_xmat, h = 3 * J.c.hb;
+    HS.REST[X.id] = { box: [R[9 * g], R[9 * g + 1], R[9 * g + 2], P[3 * g], R[9 * g + 3], R[9 * g + 4], R[9 * g + 5], P[3 * g + 1], R[9 * g + 6], R[9 * g + 7], R[9 * g + 8], P[3 * g + 2], 0, 0, 0, 1], head: Array.from(d.xpos.slice(h, h + 3)), arm: CLAW };
+}
+let headGroup, armVis = []; const CAB_V = new THREE.Vector3(), Z_UP = new THREE.Vector3(0, 0, 1);
+function syncGeoms() {
+  const P = d.geom_xpos, X = d.geom_xmat, hb = J.c.hb, BP = d.xpos, BX = d.xmat;
+  headGroup.matrix.set(BX[9 * hb], BX[9 * hb + 1], BX[9 * hb + 2], BP[3 * hb], BX[9 * hb + 3], BX[9 * hb + 4], BX[9 * hb + 5], BP[3 * hb + 1], BX[9 * hb + 6], BX[9 * hb + 7], BX[9 * hb + 8], BP[3 * hb + 2], 0, 0, 0, 1); headGroup.matrixWorldNeedsUpdate = true;
+  for (const [b, o] of armVis) { const p = 3 * b, r = 9 * b; o.matrix.set(BX[r], BX[r + 1], BX[r + 2], BP[p], BX[r + 3], BX[r + 4], BX[r + 5], BP[p + 1], BX[r + 6], BX[r + 7], BX[r + 8], BP[p + 2], 0, 0, 0, 1); o.matrixWorldNeedsUpdate = true; }
+  for (const [g, o] of geoms) { const p = 3 * g, r = 9 * g;
+    o.matrix.set(X[r], X[r + 1], X[r + 2], P[p], X[r + 3], X[r + 4], X[r + 5], P[p + 1], X[r + 6], X[r + 7], X[r + 8], P[p + 2], 0, 0, 0, 1); o.matrixWorldNeedsUpdate = true; }
+  const x = d.xpos, h = 3 * J.c.hb, r = 9 * J.c.hb, ht = CLAW === '2hsq' ? 0.106 : 0.183, rz = RIG_Z - 0.02;   // верх корпуса: 2hsq 10.6 см, эталон 18.3
+  const top = [x[h] + BX[r + 2] * ht, x[h + 1] + BX[r + 5] * ht, x[h + 2] + BX[r + 8] * ht], tx = d.qpos[ids.cq], ty = d.qpos[ids.cq + 1];   // отверстие — на оси головы (голова качается — отверстие с ней); каретка — над телом каретки (и в ?replay — qpos из записи)
+  deco.beam.position.y = ty; deco.trolley.position.set(tx, ty, RIG_Z);
+  CAB_V.set(tx - top[0], ty - top[1], rz - top[2]); const L = Math.max(0.01, CAB_V.length());   // трос — от каретки в отверстие (пользователь 23.10: «трос выходит за пределы отверстия»)
+  deco.cable.position.set((tx + top[0]) / 2, (ty + top[1]) / 2, (rz + top[2]) / 2); deco.cable.quaternion.setFromUnitVectors(Z_UP, CAB_V.divideScalar(L)); deco.cable.scale.z = L;
+}
+
+let RAW, S, BOX;                                                                 // S — настройки автомата (пресет + ползунки), BOX — коробка
+let CLAW;                                                                       // лапа модели: '2hsq' — из сцены (одна Г-рука 2hsq, левая — зеркало правой); 'M' / 'S' — эталон (claw_geo.js, зал 1)
+const MODELS = {};                                                              // скомпилированные лапы мира (2hsq, руки M / S): соседние автоматы с другими руками — переключение без компиляции (60 мс рывка при перелёте)
+function compile(claw) {
+  ({ m, d, J } = MODELS[claw] ??= (() => { const m = mj.MjModel.from_xml_string(claw === '2hsq' ? RAW.xml : Drive.clawXml(RAW.xml, CLAW_GEO, claw)), c = RAW.J.c, at = (c.armt[0] + c.armt[1]) / 2;   // руки одинаковые — и усилие одно (среднее ARM_T мира)
+    return { m, d: new mj.MjData(m), J: { ...RAW.J, c: { ...c, armt: [at, at] } } }; })()); CLAW = claw;
+  const id = (t, n) => mj.mj_name2id(m, mj.mjtObj[t].value, n);
+  ids.box = id('mjOBJ_BODY', 'box');
+  ids.cq = m.jnt_qposadr[id('mjOBJ_JOINT', 'carriage')];
+  Drive.setup(mj, m, d, J); WORLD = worldBars();
+}
+async function load(mv) {
+  for (const k in MODELS) { MODELS[k].d.delete(); MODELS[k].m.delete(); delete MODELS[k]; }   // другой мир — модели заново
+  RAW = await loadData(mv); R = RAW.J.replay; compile('2hsq');
+  const L0 = MACHINES.find(x => x.id === (new URLSearchParams(location.search).get('lvl') || 'H1-0'));   // ?lvl=H2-3 — сразу на уровень; без lvl — зал 1, автомат 1-0 (корпус, лапа и правила эталон) (корпус, лапа и правила эталон)
+  pick(L0?.id || $('mach').value || '2hsq', L0?.box || $('boxsel').value || '2hsq');
+  window.dbg = { get m() { return m; }, get d() { return d; }, get J() { return J; }, mj, RAW, get S() { return S; }, get CLAW() { return CLAW; }, get game() { return game; }, mark: p => hintMark(p), hintInfo: () => ({ mark: !!HINT.mark, tl: TL(), on: TUT.on, snaps: TUT.snaps ?? 0, drop: TUT.drop }), camera, controls,   // для проверки из консоли; snap() — снимок для scan_js.mjs (подсказка удара)
+    snap: () => ({ qpos: Array.from(d.qpos), qvel: Array.from(d.qvel), mocap_pos: Array.from(d.mocap_pos), mocap_quat: Array.from(d.mocap_quat), M: S, B: BOX }) };
+  const rp = new URLSearchParams(location.search).get('replay');                 // ?replay=a.json,b.json — запись бота (bot_js.mjs) по кадрам, уровни подряд (демо-видео)
+  if (rp) { const q = new URLSearchParams(location.search), sp = q.get('speed'), cm = q.get('cam'); if (sp) { $('speed').add(new Option(sp)); $('speed').value = sp; }
+    if (cm) { $('cam').value = cm; setCam(cm); }                                 // &cam=front — камера с первого кадра
+    if (q.get('hud') === '0') { for (const c of $('hud').children) if (c.id !== 'state') c.style.display = 'none'; for (const k of ['keys', 'pads']) $(k).style.display = 'none'; }   // &hud=0 — для видео только подпись хода
+    REPLAY = await Promise.all(rp.split(',').map(f => fetch(f, { cache: 'reload' }).then(r => r.json()))); nextReplay(); }
+  const cs = new URLSearchParams(location.search).get('case');                    // ?case=<запись case_probe> — играть самому: автомат и коробка записи, коробка в позе последнего кадра (&pose=first — первого); «Новая коробка» — снова в эту позу
+  if (cs) { const D = await fetch(cs, { cache: 'reload' }).then(r => r.json()); if (!MACHINES.some(x => x.id === D.M.id)) { MACHINES.push(D.M); BOXES.push(D.B); }
+    CASE = { id: D.M.id, f: new URLSearchParams(location.search).get('pose') === 'first' ? D.frames[0] : D.frames[D.frames.length - 1] }; pick(D.lvl, D.box); }
+}
+let CASE = null;
+let REPLAY = null;
+function nextReplay() {                                                          // следующая запись: её уровень и коробка, кадры вместо физики
+  const D = REPLAY.shift(); if (!D) return;
+  if (D.M && !MACHINES.some(x => x.id === D.M.id)) { MACHINES.push(D.M); BOXES.push(D.B); }   // запись со своим автоматом и коробкой (devtools/case_probe.mjs REC — ход с видео в нашей физике)
+  pick(D.lvl, D.box); game = { ...game, s: 'replay', k: 0, D, won: false };
+}
+let WORLD;
+function worldBars() {                                                          // прутки мира (после setup): [y, z, r, μ, скос] — пресет «2hsq» = как в сцене
+  return J.c.BARS.map(g => [m.geom_pos[3 * g + 1], m.geom_pos[3 * g + 2], m.geom_size[3 * g], m.geom_friction[3 * g], 0]);
+}
+function pick(mid, bid, view = true) {                                          // выбрать пресет автомата и коробку, ползунки — по ним; view false — только физика (предрасчёт покоя restHall)
+  const M = MACHINES.find(x => x.id === mid) || MACHINES[0];
+  if (view && M.hall && !HS.LOW && !HALLS.has(M.hall)) restHall(M.hall, M.arm);  // на телефоне соседей нет — и считать нечего
+  if ((M.arm || '2hsq') !== CLAW) compile(M.arm || '2hsq');                     // зал эталон — своя лапа (руки M / S)
+  S = { ...M, bars: (M.bars || WORLD).map(b => b && b.slice()), armt: M.armt ?? J.c.armt0?.[0] ?? J.c.armt[0], mech: M.mech ?? (S?.hall ? false : $('mech').checked), lift: M.lift ?? $('lift').checked };   // эталон — у зала эталон включён, иначе переключатель (из зала — выключен)
+  if (M.hall) $('hold').checked = false;                                        // в эталон коробку до подъёма никто не держит
+  BOX = BOXES.find(x => x.id === bid) || BOXES[0];
+  if (view) { $('mach').value = M.id; $('boxsel').value = BOX.id; $('about').textContent = M.about || ''; toSliders(); }
+  reset(view);
+}
+function reset(view = true) {                                                   // начальное состояние мира хода с настройками S, лапа — на старт
+  st = Drive.setup(mj, m, d, J);
+  const placed = Drive.machine(mj, m, d, J, S, BOX);
+  if (CASE && S.id === CASE.id) { d.qpos.set(CASE.f.slice(J.c.qa, J.c.qa + 7), J.c.qa); d.qvel.fill(0, J.c.BV, J.c.BV + 6); mj.mj_forward(m, d); }   // ?case — коробка в позе из записи
+  const bp = !S.train && !(CASE && S.id === CASE.id) && window.Save?.get().bpose?.[S.id];   // коробка, оставленная на этом автомате в прошлый раз (пользователь 23.10 через 3f: «добить в другой раз»)
+  const bq = bp?.q ?? (!S.train && !(CASE && S.id === CASE.id) && !window.Save?.get().won?.[S.id] && ((tutOn() && window.TUTOR?.[S.id]?.[0]?.p) || S.start_q));   // TUTOR — старт обучающей цепочки (tutor_table.js), пока призов ≤ 2   // start_q — только первая коробка, пока автомат не выигран (дальше — обычный спавн)   // start_q — лёгкий старт зала 1 (make_machines.py, пользователь 24.10: «на краю лежали»)
+  if (bq) { d.qpos.set(bq, J.c.qa); d.qvel.fill(0, J.c.BV, J.c.BV + 6); mj.mj_forward(m, d); }
+  game = Drive.game(S); game.tries = bp?.n ?? 0; game.atry = bp?.a ?? 0; sPrev = 'idle';
+  teleport(game.P);
+  if (placed || bq) settle();
+  game.q0 = Array.from(d.xquat.slice(4 * ids.box, 4 * ids.box + 4)); game.won = false;
+  if (view) { fitCab(S.cab); buildGeoms(); $('win').style.display = 'none'; ui(); }
+}
+function settle() {                                                             // коробка не из мира — дать лечь на прутки (как спавн эталон над прутками), лапа стоит на старте
+  const v = d.qvel;
+  for (let k = 0; k < 2500; k++) {
+    Drive.step(mj, m, d, J, st, Drive.auto(game, d, st, J, S, {}, m.opt.timestep, R.tab_q[0]));
+    if (k > 150 && Math.hypot(v[J.c.BV], v[J.c.BV + 1], v[J.c.BV + 2], v[J.c.BV + 3], v[J.c.BV + 4], v[J.c.BV + 5]) < 2e-3) break;
+  }
+  game.t = 0;
+}
+function teleport(P) {                                                          // каретка с головой и руками — сразу в точку (сдвиг свободного сустава каретки)
+  const h = 3 * J.c.hb, q = d.qpos;
+  for (let j = 0; j < 3; j++) q[ids.cq + j] += P[j] - d.xpos[h + j];
+  d.qvel.fill(0); d.mocap_pos.set([P[0], P[1], P[2] + J.c.drop / 100]); d.mocap_quat.set(R.tab_q[0]); mj.mj_forward(m, d);
+}
+// --- Автомат: Drive.auto (drive.js) — кнопки → спуск → пауза → смыкание с постоянным моментом → подъём → возврат → раскрытие только на старте
+const btn = { 1: false, 2: false };
+const DEMO = { on: false, moved: false, next: performance.now() + 6000 + 4000 * Math.random() };   // меню: сам ход лапы (physStep); moved — коробка/лапа не на старте → reset при выходе из меню
+const demoStop = () => { if (!DEMO.moved) return; DEMO.on = DEMO.moved = false; DEMO.next = performance.now() + 6000 + 4000 * Math.random(); reset(); };
+function physStep() {
+  const G = game, dt = m.opt.timestep;
+  if (BP.hold) { d.qpos.set(BP.pose(), J.c.qa); d.qvel.fill(0, J.c.BV, J.c.BV + 6); }   // ?dev «поза коробки»: держим в позе ползунков, пока стоит галочка
+  if (G.s === 'replay') { const f = G.D.frames[(G.k / G.D.every) | 0];
+    if (!f) { nextReplay(); return; }
+    if (G.k++ % G.D.every === 0) { d.qpos.set(f); mj.mj_forward(m, d); }
+    return; }
+  if (G.s === 'hint') { const f = HINT.best.frames[G.k >> 1]; if (!f) return hintEnd(); if (G.k++ % 2 === 0) { d.qpos.set(f); mj.mj_forward(m, d); } return; }   // показ подсказки: кадр на 2 шага — ×3 (кадры через 6 шагов)
+  if (!DEMO.on && G.s === 'idle' && document.body.dataset.scr === 'menu' && !fly && !Home.on && !DEV && !S.train && performance.now() > DEMO.next) {   // меню: лапа сама пробует коробку (пользователь 23.10) — без жетона и приза
+    const b = 3 * ids.box; DEMO.tx = d.xpos[b] + (Math.random() - 0.5) * 0.06; DEMO.ty = d.xpos[b + 1] + (Math.random() - 0.5) * 0.06; DEMO.on = DEMO.moved = true; st.press = [-1, -1]; Drive.press(G, 1); }
+  if (DEMO.on && G.s === 'wait2') Drive.press(G, 2);
+  if (DEMO.on && G.s === 'idle' && G.t > 1) { DEMO.on = false; DEMO.next = performance.now() + 12000 + 13000 * Math.random(); }
+  const s0 = G.s, cmd = Drive.auto(G, d, st, J, S, DEMO.on ? { 1: G.s === 'move1' && G.P[0] < DEMO.tx, 2: G.s === 'move2' && G.P[1] < DEMO.ty } : btn, dt, R.tab_q[0]);
+  if (TUT.snap && tut() && !DEMO.on && G.t - (s0 === 'move2' ? G.t2 : 0) < 0.5 && ((s0 === 'move1' && G.s === 'wait2') || (s0 === 'move2' && G.s !== 'move2'))) return tutBack();   // 1-0: отпустил раньше 0,5 с — на старт
+  Drive.step(mj, m, d, J, st, cmd);
+  if ($('hold').checked && G.box0 && G.t < G.tup + J.c.HX) Drive.holdBox(J, d, G.box0);   // BOX_HOLD_UP сима: проверенный способ, у реального автомата его нет
+}
+function press(k) {
+  const sc = document.body.dataset.scr; if (sc && sc !== 'game') return;   // ход — только на экране автомата (ui.js пишет экран в body.dataset.scr; пусто — стенды без ui.js)
+  const G = game;
+  if (k === 0) { if (G.s !== 'idle') return; if (!S.train && window.Tokens && !Tokens.spend()) return; G.tries++; G.s = 'ready'; dispatchEvent(new CustomEvent('move', { detail: S.id })); return; }   // жетон (ход в 3 шага, пользователь 23.10): Tokens.spend, 'move' — ход начат; тренировка — без списания
+  if (k === 1) { if (G.s === 'idle' && DEV) press(0); if (G.s !== 'ready') return; st.press = [-1, -1]; if (tut()) TUT.snap = { ...dbg.snap(), P: [...G.P] }; }
+  if (k === 2 && G.s === 'wait2') G.t2 = G.t;   // «вправо» — только после жетона (?dev — жетон сам)
+  Drive.press(G, k);
+}
+// 1-0 (обучение, пользователь 25.10): отпустил кнопку раньше 0,5 с — лапа на старт, жетон не сгорает; столб света под лапой — куда целится; на 1-0 и 1-1 метка удара — сразу, без «Подсказки», если поза коробки есть в таблице (на 1-1 — «чуть меньше, без столба света»)
+function tutOn() { const t = TL(); return t <= 2 || (t < 9 && !!window.TUTOR_ALWAYS?.includes(S.id)); }   // обучение идёт: призов ≤ 2 или урок автомата (TUTOR_ALWAYS: 4-й — ронять из косой позы, 5-й — поставить в неё и уронить; пользователь 26.10), пока автомат не пройден
+function TL() { const w = window.Save?.get().won ?? {}; return S.train || w[S.id] ? 9 : Object.keys(w).length; }   // function — reset() зовёт до этой строки   // ступень обучения — по числу призов, пока на этом автомате приза нет (пользователь 25.10 через boxiki-93): 0 — всё, 1 — метка и мерцание кнопки, 2 — метка, 3+ — ничего
+const TUT = { snap: null, col: null, miss: '' }, tut = () => TL() === 0, AIM = ['ready', 'move1', 'wait2', 'move2'];
+function tutBack() { const s = TUT.snap; d.qpos.set(s.qpos); d.qvel.set(s.qvel); d.mocap_pos.set(s.mocap_pos); d.mocap_quat.set(s.mocap_quat); mj.mj_forward(m, d); game.P.splice(0, 3, ...s.P); game.s = 'ready'; game.t = 0; }
+const near = (p, q, dp, da) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < dp && 2 * Math.acos(Math.min(1, Math.abs(p[3] * q[3] + p[4] * q[4] + p[5] * q[5] + p[6] * q[6]))) < da;
+function boxTo(p) { TUT.snaps = (TUT.snaps ?? 0) + 1; d.qpos.set(p, J.c.qa); d.qvel.fill(0, J.c.BV, J.c.BV + 6); mj.mj_forward(m, d); settle(); syncGeoms(); TUT.miss = ''; bpose(S.id, { q: Array.from(d.qpos.slice(J.c.qa, J.c.qa + 7), v => +v.toFixed(4)), n: game.tries, a: game.atry }); }   // как Hall.assist
+function tutSnap(G) {                                                            // стабильное обучение (пользователь 25.10: «надо стабильное обучение»): лапу опустили в пределах 3 см от метки — шаг засчитан, коробка точно в позу следующего шага, что бы ни сделала физика; мимо — тихо обратно в позу шага; пока призов ≤ 2
+  const T = window.TUTOR?.[S.id]; if (!T || !tutOn() || DEMO.moved || document.body.dataset.scr !== 'game') return;
+  if ((G.s === 'open' || G.s === 'drop') && TUT.dn !== S.id + ':' + G.tries) { TUT.dn = S.id + ':' + G.tries; TUT.drop = [G.P[0], G.P[1]]; }   // куда опустили лапу (ход — свой у каждого автомата)
+  if (G.s !== 'idle' || G.won) return;
+  const P = Array.from(d.qpos.slice(J.c.qa, J.c.qa + 7)), at = T.findIndex(s => near(s.p, P, 0.01, 0.1));
+  if (TUT.tid !== S.id) Object.assign(TUT, { tid: S.id, tn: G.tries, on: at });
+  if (G.tries === TUT.tn) { if (at >= 0) TUT.on = at; return; }   // между ходами: на каком шаге коробка
+  TUT.tn = G.tries; const k = TUT.on; if (k < 0) return;
+  const s = T[k], aim = [s.p[0] + s.pt[0], s.p[1] + s.pt[1]], hit = TUT.dn === S.id + ':' + G.tries && Math.hypot(TUT.drop[0] - aim[0], TUT.drop[1] - aim[1]) < 0.03;
+  if (k + 1 < T.length && (hit || near(T[k + 1].p, P, 0.03, 0.35))) { boxTo(T[k + 1].p); TUT.on = k + 1; return; }
+  boxTo(s.p); }   // мимо (и последний шаг без приза) — повтор шага
+function tutUI(G) {
+  const on = tut() && document.body.dataset.scr === 'game' && AIM.includes(G.s), h = 3 * J.c.hb;
+  if (!TUT.col && on) { TUT.col = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 24, 1, true).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff1c4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); world.add(TUT.col); }
+  if (TUT.col) TUT.col.visible = on;
+  if (on) { const z0 = d.xpos[3 * ids.box + 2] - 0.1, z1 = d.xpos[h + 2] - 0.05; TUT.col.scale.z = Math.max(0.05, z1 - z0); TUT.col.position.set(d.xpos[h], d.xpos[h + 1], (z0 + z1) / 2); }   // от головы лапы вниз сквозь коробку (глубина прячет то, что за ней)
+  const k = S.id + ':' + G.tries;   // позы нет в таблице — до следующего хода не искать
+  if (tutOn() && document.body.dataset.scr === 'game' && AIM.includes(G.s) && !HINT.mark && TUT.miss !== k) { const tb = hintTable(); if (tb) hintMark([tb.x, tb.y]); else TUT.miss = k; } }
+const NAMES = { hintcalc: 'считаю подсказку…', hint: 'подсказка: смотри, куда бить', idle: 'Жми и держи 1 — вправо', ready: 'жетон брошен — жми 1', move1: 'едет вправо…', wait2: 'Жми и держи 2 — вглубь', move2: 'едет вглубь…', open: 'раскрытие', drop: 'спуск', settle: 'легла', close: 'хват', lift: 'подъём', carry: 'к точке отпускания', release: 'раскрытие', shut: 'смыкание', return: 'возврат на старт' };   // ?dev — все состояния
+const NAMES_P = { ru: { hintcalc: 'считаю подсказку…', hint: 'подсказка: смотри, куда бить', idle: `Брось жетон — ${PC ? 'пробел' : 'жёлтая кнопка'}`, ready: `Жми и держи ${PC ? 'пробел' : 'кнопку'} — вправо`, wait2: `Жми и держи ${PC ? 'пробел' : 'кнопку'} — вглубь` },   // игроку — только подсказки, состояния аппарата не пишем (пользователь 23.10, через f9)
+  en: { hintcalc: 'finding a hint…', hint: 'hint: watch where to aim', idle: `Insert a token — ${PC ? 'Space' : 'yellow button'}`, ready: `Press and hold ${PC ? 'Space' : 'the button'} — right`, wait2: `Press and hold ${PC ? 'Space' : 'the button'} — back` } };   // ПК — пробел, телефон — кнопка пульта (пользователь 23.10: «не 1 или 2»)
+const TXT = { ru: { win: 'ПРИЗ!', hint: 'Подсказка', b0: 'жетон', b1: 'вправо', b2: 'вглубь', tb: 'ПУСТАЯ' }, en: { win: 'PRIZE!', hint: 'Hint', b0: 'token', b1: 'right', b2: 'back', tb: 'EMPTY' } };
+let langNow = '';
+const trainMats = (() => { const C = {};                                         // тренировка (T-0): пустая коробка — голый крафт, скотч и штамп «ПУСТАЯ» сверху и снизу (пользователь 23.10)
+  const paint = (w, h, top, up) => { const cv = document.createElement('canvas'), W = cv.width = Math.round(w * 2000), H = cv.height = Math.round(h * 2000), g = cv.getContext('2d'); let r = 7;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647; g.fillStyle = '#c4955c'; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 400; i++) { g.strokeStyle = `rgba(${rnd() < 0.5 ? '90,58,28' : '235,200,150'},${0.08 + 0.1 * rnd()})`; g.lineWidth = 1 + 2 * rnd(); const x = rnd() * W, y = rnd() * H; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * W * 0.2, y + (rnd() - 0.5) * 6); g.stroke(); }   // волокна картона
+    g.strokeStyle = 'rgba(80,50,22,.45)'; g.lineWidth = Math.min(W, H) * 0.025; g.strokeRect(0, 0, W, H);
+    if (top) { const L = W > H, T = TXT[lang()].tb, m = Math.min(W, H); g.fillStyle = 'rgba(232,210,160,.8)'; L ? g.fillRect(0, H * 0.4, W, H * 0.2) : g.fillRect(W * 0.4, 0, W * 0.2, H);   // скотч вдоль длинной стороны
+      g.save(); g.translate(W / 2, H / 2); g.rotate((L || up ? 0 : -Math.PI / 2) - 0.12); g.strokeStyle = g.fillStyle = 'rgba(178,34,44,.88)'; g.lineWidth = m * 0.035; g.font = `800 ${m * 0.24}px "M PLUS Rounded 1c", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const tw = g.measureText(T).width + m * 0.16; g.strokeRect(-tw / 2, -m * 0.2, tw, m * 0.4); g.fillText(T, 0, m * 0.01); g.restore(); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 }); };
+  const mats = s => { const k = s.map(v => v.toFixed(4)).join() + lang(); if (C[k]) return C[k]; const [x, y, z] = s.map(v => 2 * v);   // грани BoxGeometry: +x −x +y −y +z −z
+    return C[k] = [paint(z, y), paint(z, y), paint(x, z), paint(x, z), paint(x, y, 1), paint(x, y, 1)]; };
+  mats.stand = (x, y, z) => (C['s' + [x, y, z, lang()]] ??= [paint(y, z), paint(y, z), paint(x, z, 1, 1), paint(x, z, 1, 1), paint(x, y), paint(x, y)]).map(m => m.clone());   // стоячая на полке (ширина x, толщина y, высота z): штамп поперёк — на лице (−y) и тыле; клон — своё мерцание
+  return mats; })();
+let shelfFor = null; const shelf = new THREE.Group();                            // тренировка: остальные коробки на полке витрины (где фигурка приза), мерцают — их можно тапнуть
+function trainShelf() {
+  const k = S.train ? S.id : ''; if (k === shelfFor) return; shelfFor = k; shelf.clear(); if (!S.train) return shelf.removeFromParent();
+  const L = MACHINES.filter(x => x.train && x.id !== S.id).map(M => ({ M, B: BOXES.find(b => b.id === M.box) })).sort((a, b) => b.B.mass - a.B.mass || b.B.size[0] * b.B.size[1] - a.B.size[0] * a.B.size[1]), C = S.cab, gap = 0.015;
+  let n = L.length; while (n > 1 && L.slice(0, n).reduce((a, x) => a + x.B.size[1], 0) + gap * (n - 1) > 2 * C.bar_half * 0.95) n--;   // в натуральную величину: столбцов сколько влезает лёжа (длинной стороной вдоль полки), остальные — сверху стопками (пользователь 23.10 через c6)
+  const col = [...Array(n)].map((_, i) => ({ x: 0, z: C.shelf_z, w: L[i].B.size[1] })), tot = col.reduce((a, c) => a + c.w, 0) + gap * (n - 1); let x = -tot / 2;
+  for (const c of col) { c.x = x + c.w / 2; x += c.w + gap; }
+  L.forEach(({ M, B }, i) => { const [w, l, h] = B.size, c = col[i % n], o = new THREE.Mesh(new THREE.BoxGeometry(w, l, h), trainMats([w / 2, l / 2, h / 2]));   // лёжа, как на прутках; тяжёлые — в нижний ряд
+    o.rotation.z = Math.PI / 2 + (i % 2 ? 1 : -1) * 0.03; o.position.set(c.x, C.shelf + 0.03 + w / 2, c.z + h / 2); c.z += h + 0.002; o.userData.train = M.id; o.castShadow = true; shelf.add(o); });
+  scene.add(shelf); }
+{ const ray = new THREE.Raycaster(), at = new THREE.Vector2(); let down = null;   // тап по коробке на полке (не поворот камеры: сдвиг ≤ 6 px)
+  renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6 || !shelf.parent) return; const r = renderer.domElement.getBoundingClientRect();
+    at.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); ray.setFromCamera(at, camera); const h = ray.intersectObjects(shelf.children)[0];
+    const sc = document.body.dataset.scr; if (h && (!sc || sc === 'game')) Hall.trainPick(h.object.userData.train); }); }
+const MOVES = window.MOVES = (() => { try { return JSON.parse(localStorage.getItem('moves')) || []; } catch { return []; } })();   // журнал ходов игрока для разбора логики: коробка до, точка лапы, коробка после, приз
+let prevS = 'idle';
+function logMove(G) {
+  if (G.s === prevS) return;
+  const b = 3 * ids.box, pose = () => [...d.xpos.slice(b, b + 3), ...d.xquat.slice(4 * ids.box, 4 * ids.box + 4)].map(v => +v.toFixed(4)), mv = MOVES.at(-1);
+  if (G.s === 'move1' && (prevS === 'idle' || prevS === 'ready')) MOVES.push({ lvl: S.id, t: new Date().toISOString(), before: pose() });
+  else if (mv && !mv.aim && (G.s === 'open' || G.s === 'drop')) mv.aim = [+G.P[0].toFixed(4), +G.P[1].toFixed(4)];
+  else if (mv && mv.aim && !mv.after && G.s === 'idle') { mv.after = pose(); mv.won = G.won; try { localStorage.setItem('moves', JSON.stringify(MOVES)); } catch {} }
+  prevS = G.s;
+}
+const bpose = (id, v) => { if (!window.Save) return; const b = { ...Save.get().bpose }; if (v) b[id] = v; else delete b[id]; Save.set({ bpose: b }); };   // Save.bpose[id] = { q: qpos коробки, n: жетонов на ней }
+let sPrev = 'idle';
+function boxSave(force) {                                                        // лапа вернулась после хода (или ушли с автомата) — поза коробки в сохранение; приз — убрать (новая коробка)
+  const was = sPrev; sPrev = game.s;
+  if (!force && !(game.s === 'idle' && ['return', 'release', 'shut'].includes(was))) return;
+  if (S.train || DEMO.on || DEMO.moved || (CASE && S.id === CASE.id) || !game.tries) return;
+  bpose(S.id, game.won ? null : { q: Array.from(d.qpos.slice(J.c.qa, J.c.qa + 7), v => +v.toFixed(4)), n: game.tries, a: game.atry });
+}
+function snapHome() { game.s = 'idle'; game.t = 0; game.P.splice(0, 3, ...Drive.game(S).P); teleport(game.P); }   // лапа сразу на старт (ушли с автомата, пока она разжалась и едет домой)
+function ui() {
+  const G = game, b = 3 * ids.box, q = d.xquat.slice(4 * ids.box, 4 * ids.box + 4), dot = Math.abs(q[0] * G.q0[0] + q[1] * G.q0[1] + q[2] * G.q0[2] + q[3] * G.q0[3]);
+  trainShelf(); if (shelf.parent) { const a = 0.1 + 0.1 * Math.sin(performance.now() / 260); for (const o of shelf.children) for (const mt of o.material) { mt.emissive.setRGB(1, 0.85, 0.5); mt.emissiveIntensity = game.s === 'idle' ? a : 0; } }   // кликабельное мерцает (только между ходами)
+  if (DEV && !BP.hold && $('bpose').open) BP.get();   // ?dev «поза коробки»: пока не держим — ползунки показывают, где коробка (иначе первый сдвиг дёргает её с прошлой позы)
+  const L = lang(); if (L !== langNow) { langNow = L; const T = TXT[L]; $('win').textContent = T.win; $('hint').textContent = T.hint; $('b0').ariaLabel = T.b0; $('b1').ariaLabel = T.b1; $('b2').ariaLabel = T.b2; }   // P.lang приходит после P.init
+  $('state').textContent = G.s === 'replay' ? G.D.labels[(G.k / G.D.every) | 0] ?? '' : DEV ? NAMES[G.s] : NAMES_P[L][G.s] ?? ''; $('b0').disabled = G.s !== 'idle'; $('b1').disabled = !(G.s === 'ready' || G.s === 'move1' || (DEV && G.s === 'idle')); $('b2').disabled = !(G.s === 'wait2' || G.s === 'move2');
+  $('b1').classList.toggle('on', G.s === 'move1'); $('b2').classList.toggle('on', G.s === 'move2');
+  const bz = d.xpos[b + 2];
+  $('info').textContent = DEV ? `попыток ${G.tries}${Drive.MECH.PRESS ? ` · опора ${(st.fsup ?? 0).toFixed(1)} Н, стоп при ${Drive.MECH.PRESS}` : ''}\nкоробка: поворот ${(2 * Math.acos(Math.min(1, dot)) * 180 / Math.PI).toFixed(1)}°, центр ${(d.xpos[b] * 100).toFixed(1)} / ${(d.xpos[b + 1] * 100).toFixed(1)} / ${(bz * 100).toFixed(1)} см\nлапа: ${(game.P[0] * 100).toFixed(1)} / ${(game.P[1] * 100).toFixed(1)} см · физика ${tPhys.toFixed(1)} мс/кадр` : `попыток ${G.tries}`;
+  const demo = DEMO.moved; if (demo && document.body.dataset.scr !== 'menu') demoStop();   // «Играть», квартира — лапа на старте, коробка в исходной позе; demo — до сброса: bz в этом кадре ещё из лотка — без этого лапа меню выбивала приз игроку (пользователь 23.10)
+  if (bz < WIN_Z && !G.won && G.s !== 'hint' && !demo) { G.won = true; $('win').style.display = 'block'; dispatchEvent(new CustomEvent(S.train ? 'prize-train' : 'prize', { detail: S.id })); }   // тренировка (T-*): 'prize-train' — без фигурки и сохранения
+  $('hint').hidden = !S.hint; $('hint').disabled = G.s !== 'idle';
+  if (HINT.mark && (HINT.lvl !== S.id || ['open', 'drop'].includes(G.s))) hintMark(null);
+  tutSnap(G); tutUI(G);   // метка — до спуска и только на своём автомате
+  if (!DEMO.moved) logMove(G);
+  boxSave();
+  if (!DEMO.on && document.body.dataset.scr === 'menu' && (G.s === 'shut' || G.s === 'return')) { boxSave(true); snapHome(); sPrev = 'idle'; }   // «‹ В зал» во время возврата — лапа сразу дома (3f)
+}
+
+// --- Подсказка (обучение, S.hint): в фоне заходы в сетку 9×9 вокруг коробки + 6 лучших ×3 зерна (hint_worker.js, та же физика, лапа едет кнопками), лучший ход — показ на автомате ×3, потом снимок назад и метка точки до спуска.
+// ponytail: перебор в браузере ~9.5 с (100 бросков) — пользователь: долго; быстрее — предрасчёт/модель на GPU
+const HINT = { pool: [], claw: null, mark: null };
+async function hintPool() {                                                   // потоки: до 4, модель лапы текущего автомата
+  if (HINT.claw !== CLAW) { HINT.pool.forEach(w => w.terminate()); HINT.pool = []; HINT.claw = CLAW; }
+  if (HINT.pool.length) return;
+  const init = { xml: CLAW === '2hsq' ? RAW.xml : Drive.clawXml(RAW.xml, CLAW_GEO, CLAW), J: { model: J.model, init: J.init, c: { ...J.c } }, q0: R.tab_q[0] };
+  HINT.pool = Array.from({ length: Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1)) }, () => new Worker('hint_worker.js'));
+  await Promise.all(HINT.pool.map(w => new Promise(r => { w.onmessage = r; w.postMessage({ init }); })));
+}
+function hintPoints() {                                                       // сетка ±12 см шагом 3 вокруг коробки, в пределах хода лапы
+  const b = ids.box, X = d.xmat, hs = Array.from(m.geom_size.slice(3 * J.c.GB, 3 * J.c.GB + 3)), ext = i => hs.reduce((s, h, j) => s + Math.abs(X[9 * b + 3 * i + j]) * h, 0);
+  const cl = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), xl = S.cab?.xlim ?? Drive.A.XMAX, yl = S.cab?.ymax ?? Drive.A.YMAX, cx = d.xpos[3 * b], cy = d.xpos[3 * b + 1], ex = ext(0), ey = ext(1), P = [];
+  for (let u = -4; u <= 4; u++) for (let v = -4; v <= 4; v++) P.push([cl(cx + u * 0.03, -xl + 0.01, xl), cl(cy + v * 0.03, Drive.A.HOME[1] + 0.01, yl), u % 2 === 0 && v % 2 === 0]);   // 3-е — узел грубой сетки (через 6 см)   // сетка ±12 см шагом 3 — как разведка «шумного игрока» game_solve.py
+  return [...new Map(P.map(p => [p[0].toFixed(3) + ',' + p[1].toFixed(3), p])).values()];
+}
+function hintTable() {                                                        // положение коробки из HINT_TABLE (hint_table.js) в пределах 1.5 см и 10° — лучшая точка: центр коробки + смещение
+  const T = window.HINT_TABLE?.[S.id], a = J.c.qa, P = Array.from(d.qpos.slice(a, a + 7)); let best = null, bd = 1e9;
+  for (const s of [...(T ?? []), ...(window.ASSIST_TABLE?.[S.id] ?? []).map(a => ({ p: a.p, pts: [[a.pt[0], a.pt[1], a.frac]], g: 1 }))]) { const ang = 2 * Math.acos(Math.min(1, Math.abs(s.p[3] * P[3] + s.p[4] * P[4] + s.p[5] * P[5] + s.p[6] * P[6]))), dd = Math.hypot(s.p[0] - P[0], s.p[1] - P[1], s.p[2] - P[2]);
+    if (dd < 0.015 && ang < 0.17 && dd + 0.05 * ang < bd) { bd = dd + 0.05 * ang; best = s; } }
+  for (const s of window.TUTOR?.[S.id] ?? []) if (Math.hypot(s.p[0] - P[0], s.p[1] - P[1], s.p[2] - P[2]) < 0.01 && 2 * Math.acos(Math.min(1, Math.abs(s.p[3] * P[3] + s.p[4] * P[4] + s.p[5] * P[5] + s.p[6] * P[6]))) < 0.1) return { x: P[0] + s.pt[0], y: P[1] + s.pt[1], p: 1, g: 1, seed: 1 };   // шаг обучающей цепочки — его удар
+  const sq = S.start_q, sh = S.start_hint;   // поза — лёгкий старт (start_q): готовый удар, без расчёта (пользователь 24.10: «первую подсказку не надо высчитывать»)
+  if (sq && sh && Math.hypot(sq[0] - P[0], sq[1] - P[1], sq[2] - P[2]) < 0.01) return { x: P[0] + sh[0], y: P[1] + sh[1], p: 1, g: 1, seed: 1 };
+  return best && { x: P[0] + best.pts[0][0], y: P[1] + best.pts[0][1], p: best.pts[0][2], g: best.g };   // ponytail: ближайший сосед по положениям, где были игроки GPU; середина игры обычно мимо — перебор; дальше — модель по большому счёту
+}
+async function hint() {
+  if (game.s !== 'idle' || !S.hint) return;
+  game.s = 'hintcalc'; const t0 = performance.now();
+  await hintPool();
+  const S0 = dbg.snap(), pts = hintPoints(), f = v => (v * 100).toFixed(1);
+  const run = jobs => new Promise(done => { const out = []; let i = 0; const next = w => { if (i >= jobs.length) return; const j = jobs[i++];
+    w.onmessage = e => { out.push(e.data); if (out.length === jobs.length) done(out); else next(w); };
+    w.postMessage({ job: { S: S0, every: 0, ...j } }); }; HINT.pool.forEach(next); });   // every 0 — без кадров (кадры — только у показа)
+  const tb = hintTable();
+  if (tb) {                                                                    // положение есть в таблице (разведка GPU) — без перебора: 8 бросков в лучшую точку со случайной ねじれ (по 2 на поток, ~1 с; 1-1: 43 % → без приза в показе ~1 %); показ — приз, если был, иначе ближе к провалу
+    const rr = tb.seed ? [{ id: 0, x: tb.x, y: tb.y, seed: tb.seed }] : await run([...Array(8)].map((_, k) => ({ id: k, x: tb.x, y: tb.y, seed: 1 + (Math.random() * 2 ** 30 | 0) }))), sh = rr.find(q => q.won) ?? rr.reduce((a, q) => q.sc < a.sc ? q : a);   // tb.seed — готовый удар: сразу показ
+    HINT.best = (await run([{ id: sh.id, x: sh.x, y: sh.y, seed: sh.seed, every: 6 }]))[0]; HINT.S0 = S0;
+    console.log(`подсказка ${S.id}: таблица, ${((performance.now() - t0) / 1000).toFixed(1)} с, точка ${f(tb.x)}/${f(tb.y)}, приз ${Math.round(tb.p * 100)} %, ходов до приза ~${tb.g}, показ: ${HINT.best.won ? 'ПРИЗ' : HINT.best.sc.toFixed(1)}`);
+    game.k = 0; game.s = 'hint'; hintMark([tb.x, tb.y]); return;
+  }
+  const job = ([x, y], id) => ({ id, x, y, seed: id * 7919 + 1 }), J1 = pts.map(job).filter((_, i) => pts[i][2]);
+  let res = await run(J1); const easy = res.some(r => r.won);   // проход 1: грубая сетка через 6 см (25 точек; пользователь 24.10: «подсказка долго считается»), приз есть — мелкую не считаем
+  if (!easy) res = res.concat(await run(pts.map(job).filter((_, i) => !pts[i][2])));   // нет — вся сетка 9×9 через 3 см, как раньше
+  const nb = r => res.filter(q => q.won && Math.max(Math.abs(q.x - r.x), Math.abs(q.y - r.y)) < (easy ? 0.061 : 0.031)).length;   // выигрышных в квадрате 3×3 сетки — устойчивость к промаху
+  res.forEach(r => { r.nb = r.won ? nb(r) : 0; });
+  const top = res.sort((a, b) => (b.won - a.won) || (b.nb - a.nb) || (a.sc - b.sc)).slice(0, easy ? 3 : 6);   // приз, иначе ближе к провалу (near = L.score GPU-счёта; высота коробки — не мерка: подъём и сброс на прутки «понижал» её случайно)
+  const re = await run(top.flatMap(r => (easy ? [1, 2] : [1, 2, 3]).map(k => ({ id: r.id, x: r.x, y: r.y, seed: r.id * 7919 + 1 + k * 104729 }))));   // проход 2: 6 лучших ещё ×3 зерна — приз с одного зерна бывает удачей (1-1: 1 из 4)
+  for (const r of top) { const all = [r, ...re.filter(q => q.id === r.id)]; r.p = all.filter(q => q.won).length / all.length; r.msc = all.reduce((s, q) => s + q.sc, 0) / all.length; r.show = all.find(q => q.won) ?? all.reduce((a, q) => q.sc < a.sc ? q : a); }
+  const b = top.sort((a, b) => (b.p - a.p) || (a.msc - b.msc))[0];
+  HINT.best = (await run([{ ...b.show, every: 6 }]))[0]; HINT.S0 = S0;   // показ: тот же бросок (точка и зерно) с кадрами — физика детерминирована
+  console.log(`подсказка ${S.id}: ${((performance.now() - t0) / 1000).toFixed(1)} с, ${pts.length}+${re.length} бросков, было ${res[0].sc0.toFixed(1)}`, top.map(r => `${f(r.x)}/${f(r.y)} приз ${Math.round(r.p * 4)}/4 близость ${r.msc.toFixed(1)}`).join(' · '), `показ: ${HINT.best.won ? 'ПРИЗ' : HINT.best.sc.toFixed(1)}`);
+  game.k = 0; game.s = 'hint'; hintMark([HINT.best.x, HINT.best.y]);
+}
+function hintEnd() {                                                          // показ кончился — состояние до подсказки, лапа на старте, метка остаётся
+  const S0 = HINT.S0; d.qpos.set(S0.qpos); d.qvel.set(S0.qvel); d.mocap_pos.set(S0.mocap_pos); d.mocap_quat.set(S0.mocap_quat); mj.mj_forward(m, d); game.s = 'idle';
+}
+const HM = new URLSearchParams(location.search).get('hm') || 'c';             // вид метки — стенд на выбор пользователю (23.10, «труба стрёмная»): a — мишень, b — подсветка края крышки у нужной грани, c — стрелка и пятно + тонкая линия вверх (выбор пользователя 23.10; лапа-призрак отпала: в камере игры лапа наверху не видна)
+function hintMark(p) {                                                        // метка точки удара (до спуска)
+  if (HINT.mark) { world.remove(HINT.mark); HINT.mark.traverse(o => { if (o.isMesh) { if (!o.userData.shared) o.geometry.dispose(); o.material.dispose(); } }); HINT.mark = null; }
+  if (!p) return;
+  const g = J.c.GB, R = d.geom_xmat, hs = m.geom_size, zt = d.geom_xpos[3 * g + 2] + [0, 1, 2].reduce((s, j) => s + Math.abs(R[9 * g + 6 + j]) * hs[3 * g + j], 0);   // верх коробки
+  const o = new THREE.Group(), C = 0x39d7ff, mat = (op = 0.8) => new THREE.MeshBasicMaterial({ color: C, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide });
+  const add = (geo, op, z) => { const k = new THREE.Mesh(geo, mat(op)); k.position.z = z; o.add(k); return k; };
+  if (HM === 'a') { add(new THREE.RingGeometry(0.026, 0.034, 48), 0.9, 0.004); add(new THREE.RingGeometry(0.012, 0.016, 32), 0.9, 0.004); add(new THREE.CircleGeometry(0.004, 16), 0.9, 0.004); o.position.set(p[0], p[1], zt); }
+  if (HM === 'b') { const c = [0, 1, 2].map(k => d.geom_xpos[3 * g + k]), ax = k => [R[9 * g + k], R[9 * g + 3 + k], R[9 * g + 6 + k]], h = [0, 1, 2].map(k => hs[3 * g + k]);   // подсветка грани коробки, ближней к точке (бить у этого торца)
+    const loc = [0, 1, 2].map(k => ax(k)[0] * (p[0] - c[0]) + ax(k)[1] * (p[1] - c[1])), i = [0, 1, 2].filter(k => Math.abs(ax(k)[2]) < 0.7).sort((a, b) => Math.abs(loc[b]) / h[b] - Math.abs(loc[a]) / h[a])[0], [j, k] = [0, 1, 2].filter(q => q !== i), sg = Math.sign(loc[i]) || 1;
+    const up = [j, k].sort((a, b) => Math.abs(ax(b)[2]) - Math.abs(ax(a)[2]))[0], al = [j, k].find(q => q !== up), su = Math.sign(ax(up)[2]) || 1, w = 0.025;   // полоса по краю крышки у этой грани — вертикальную грань камера видит с ребра
+    const V = q => new THREE.Vector3(...ax(q)), f = add(new THREE.PlaneGeometry(w, 2 * h[al] + 0.004), 0.6, 0);
+    f.matrixAutoUpdate = false; f.matrix.makeBasis(V(i), V(al), V(up).multiplyScalar(su)).setPosition(...c.map((v, q) => v + sg * (h[i] - w / 2) * ax(i)[q] + su * (h[up] + 0.002) * ax(up)[q])); }
+  if (HM === 'c') { add(new THREE.CircleGeometry(0.035, 40), 0.35, 0.003); add(new THREE.ConeGeometry(0.018, 0.04, 24).rotateX(-Math.PI / 2), 0.9, 0.07); add(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 12).rotateX(Math.PI / 2), 0.9, 0.115);
+    const L = Math.max(0.05, (S.top ?? 0.7) - zt - 0.14); add(new THREE.CylinderGeometry(0.0015, 0.0015, L, 8).rotateX(Math.PI / 2), 0.55, 0.14 + L / 2); o.position.set(p[0], p[1], zt); }   // линия до верха хода — куда встать лапе
+  world.add(o); HINT.mark = o; HINT.lvl = S.id;
+}
+
+// --- Управление
+const hold = (el, k) => { el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); btn[k] = true; press(k); });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, () => { btn[k] = false; }); };
+hold($('b0'), 0); hold($('b1'), 1); hold($('b2'), 2);
+const KEY = { ArrowRight: 1, Digit1: 1, ArrowUp: 2, Digit2: 2 };
+let spaceK = 0;                                                                              // пробел — та кнопка, что нужна сейчас (жетон в покое, потом 1, потом 2)
+addEventListener('keydown', e => { const k = e.code === 'Space' ? (spaceK = game?.s === 'idle' && !DEV ? 0 : ['idle', 'ready', 'move1'].includes(game?.s) ? 1 : 2) : KEY[e.code]; if (k === undefined || e.repeat) return; e.preventDefault(); btn[k] = true; press(k); });
+addEventListener('keyup', e => { const k = e.code === 'Space' ? spaceK : KEY[e.code]; if (k !== undefined) btn[k] = false; });
+$('reset').onclick = () => reset();
+$('hint').onclick = () => hint();
+const DEV = new URLSearchParams(location.search).has('dev');                  // ?dev — отладочная панель (мир, камеры, ползунки); игроку — подпись хода, попытки, кнопки хода и подсказка (черновик вида)
+const STAFF = new URLSearchParams(location.search).has('staff');              // ?staff — сотрудник сразу, без порога ходов (проверка поз assist_table)
+if (!DEV) { for (const c of $('hud').children) if (!['state', 'info'].includes(c.id)) c.style.display = 'none'; $('keys').style.display = 'none'; $('pads').append($('hint')); $('hint').style.alignSelf = 'center'; }
+$('preset').onchange = e => load(e.target.value).catch(fail);
+
+// --- Настройки автомата: пресет (machines.js) → ползунки → S; отпустил ползунок — новая коробка с этими настройками
+const CM = v => `${(v * 100).toFixed(1)} см`, B_ = i => S.bars[i], SL = {                   // [прочитать из S, записать в S, подпись]
+  armt: [() => S.armt, v => { S.armt = v; }, v => `${v.toFixed(2)} Н·м`],
+  gap: [() => B_(2)[0] - B_(1)[0], v => { const dy = B_(1)[0] + v - B_(2)[0]; for (const i of [2, 3, 4]) if (B_(i)) B_(i)[0] += dy; }, CM],   // задние прутки едут вместе с опорным 2
+  oh: [() => Math.max(...[0, 3, 4].filter(B_).map(i => B_(i)[1])), v => { for (const i of [0, 3, 4]) if (B_(i)) B_(i)[1] = v; }, CM],
+  off0: [() => B_(0) ? B_(1)[0] - B_(0)[0] : 0, v => { if (B_(0)) B_(0)[0] = B_(1)[0] - v; }, CM],   // зал 2 — переднего наружного нет
+  off3: [() => B_(3)[0] - B_(2)[0], v => { const dy = B_(2)[0] + v - B_(3)[0]; for (const i of [3, 4]) if (B_(i)) B_(i)[0] += dy; }, CM],
+  skew: [() => B_(2)[4], v => { for (const i of [2, 3]) if (B_(i)) B_(i)[4] = v; }, v => `${v}°`],
+  top: [() => S.top, v => { S.top = v; }, CM],
+  zmin: [() => S.zmin, v => { S.zmin = v; }, CM],
+  vdrop: [() => S.vdrop, v => { S.vdrop = v; }, v => `${(v * 100).toFixed(0)} см/с`],
+  tvel: [() => S.twist_v, v => { S.twist_v = v; }, v => `${v}°/с`],
+};
+function toSliders() {
+  for (const [k, [get, , fmt]] of Object.entries(SL)) { $(k).value = get(); $('v_' + k).textContent = fmt(get()); }
+  $('twist').checked = S.twist; $('mech').checked = !!S.mech; $('lift').checked = S.lift !== false;
+}
+for (const [k, [, set, fmt]] of Object.entries(SL)) {
+  $(k).addEventListener('input', e => { $('v_' + k).textContent = fmt(+e.target.value); });
+  $(k).addEventListener('change', e => { set(+e.target.value); $('cfg').dataset.dirty = '1'; reset(); });
+}
+$('twist').onchange = e => { S.twist = e.target.checked; $('cfg').dataset.dirty = '1'; };
+$('mech').onchange = e => { S.mech = e.target.checked; $('cfg').dataset.dirty = '1'; reset(); };   // режим эталон (drive.js эталон): смена прутков и сварки головы — новая коробка
+$('lift').onchange = e => { S.lift = e.target.checked; $('cfg').dataset.dirty = '1'; };
+{ const sel = $('mach'), byHouse = {};
+  for (const M of [...MACHINES].sort((a, b) => parseInt(a.cat) - parseInt(b.cat))) (byHouse[M.cat] ??= []).push(M);   // категории мостов (make_machines.py) по порядку
+  for (const [h, L] of Object.entries(byHouse)) { const g = Object.assign(document.createElement('optgroup'), { label: h });
+    for (const M of L) g.append(new Option(M.name, M.id)); sel.append(g); }
+  for (const B of BOXES) $('boxsel').append(new Option(B.mass ? `${B.name} · ${Math.round(B.mass * 1000)} г` : B.name, B.id)); }
+$('mach').onchange = () => { $('cfg').dataset.dirty = ''; const M = MACHINES.find(x => x.id === $('mach').value); pick(M.id, M.box); };   // коробка — своя у стадии (эталон: замеры)
+$('boxsel').onchange = () => { BOX = BOXES.find(x => x.id === $('boxsel').value); reset(); };
+
+// --- Камера: как на видео (калибровка хода 225, view3d_225), свободная, сверху, сбоку
+const VCAM = { p: [6.51, -21.99, 63.23], m: [0.99866, -0.00947, 0.05086, 0.0349, 0.84894, -0.52734, -0.03818, 0.52841, 0.84813], fy: 1618.4 };
+const vfov = () => 2 * Math.atan(Math.max(540, 960 / camera.aspect) / VCAM.fy) * 180 / Math.PI;   // кадр видео 1920×1080 целиком при любом окне
+const FIT = { A: [40, 0, 1], C: [38, 28, 1], D: [60, 0, 0], E: [55, -90, 1, 1.13] };   // 4-е — предел расстояния, м (E: камера не дальше x ≈ −0.65 — дальше соседний автомат); не влезло — шире угол   // виды у автомата (выбор пользователя 24.10 на стенде style_lab/cams.html, «а с д»; E — со стороны левого стекла сверху, по его снимку): высота над горизонтом °, азимут ° (0 — спереди), вписать лапу на старте
+function fitCam([el, az, head, kmax = 6]) {                                               // камера на луче к середине прутков; расстояние — чтобы прутки, коробка и (A, C) лапа на старте влезли в экран любой ориентации, с полями под кнопки
+  const xl = S.cab?.xlim ?? Drive.A.XMAX, b = (S.bars ?? []).filter(Boolean), ys = b.length ? b.map(x => x[0]) : [-0.1, 0.3], y0 = Math.min(...ys) - 0.03, y1 = Math.max(...ys) + 0.03, P = [];
+  for (const x of [-xl, xl]) for (const y of [y0, y1]) for (const z of [0, 0.22]) P.push(new THREE.Vector3(x, y, z));
+  if (head) P.push(new THREE.Vector3(d.xpos[3 * J.c.hb], d.xpos[3 * J.c.hb + 1], d.xpos[3 * J.c.hb + 2]));
+  const tg = new THREE.Vector3(0, (y0 + y1) / 2, 0.08), e = el * Math.PI / 180, a = az * Math.PI / 180, dir = new THREE.Vector3(Math.sin(a) * Math.cos(e), -Math.cos(a) * Math.cos(e), Math.sin(e)), pr = $('pads')?.getBoundingClientRect(), lo = pr?.height ? Math.min(-0.3, 1 - 2 * pr.top / innerHeight + 0.2) : -0.52;   // низ кадра — над панелью кнопок (+ строка подсказки хода): портрет ≈ −0.52, ПК ≈ −0.4; ландшафт телефона (панель — полэкрана) — не выше −0.3, иначе виден весь зал
+  camera.fov = 50; camera.updateProjectionMatrix();
+  const ok = k => { camera.position.copy(tg).addScaledVector(dir, k); camera.lookAt(tg); camera.updateMatrixWorld(); return P.every(p => { const q = p.clone().project(camera); return Math.abs(q.x) < 0.94 && q.y < 0.8 && q.y > lo; }); };
+  let k0 = 0.2, k1 = kmax; for (let i = 0; i < 40; i++) { const k = (k0 + k1) / 2; if (ok(k)) k1 = k; else k0 = k; }
+  if (!ok(k1)) { let f0 = 50, f1 = 100; for (let i = 0; i < 30; i++) { camera.fov = (f0 + f1) / 2; camera.updateProjectionMatrix(); if (ok(kmax)) f1 = camera.fov; else f0 = camera.fov; } camera.fov = f1; camera.updateProjectionMatrix(); ok(kmax); }
+  controls.target.copy(tg);
+}
+function setCam(kind) {
+  camFree = kind === 'free';
+  if (FIT[kind]) { fitCam(FIT[kind]); camera.updateProjectionMatrix(); if (camFree) controls.update(); return; }
+  if (kind === 'video' || kind === 'free' || kind === 'play') {
+    const M = VCAM.m, B = new THREE.Matrix4().makeBasis(new THREE.Vector3(M[0], M[3], M[6]), new THREE.Vector3(M[1], M[4], M[7]), new THREE.Vector3(M[2], M[5], M[8]));
+    camera.position.set(...VCAM.p.map(v => v / 100)); camera.quaternion.setFromRotationMatrix(B); camera.fov = vfov();
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), k = (0.06 - camera.position.z) / dir.z; controls.target.copy(camera.position).addScaledVector(dir, k);
+    if (kind === 'play') camera.position.sub(controls.target).multiplyScalar(1.3).add(controls.target);   // старт у автомата (выбор пользователя 23.10, вариант А): «как на видео», отъезд ×1,3 — шахта целиком
+  } else {
+    const [p, t, fov] = { top: [[0, 0.085, 1.25], [0, 0.1, 0], 40], front: [[0, -1.1, 0.45], [0, 0.12, 0.3], 46], side: [[1.15, 0.12, 0.45], [0, 0.12, 0.26], 46], wide: [[0, -1.4, 0.62], [0, 0.12, 0.4], 48], hall: [[0.35, -2.7, 0.95], [0, 0.4, 0.5], 50], front3: [[0, -0.62, 0.88], [0, 0.12, 0.03], 44], side3: [[0.6, -0.5, 0.82], [0.02, 0.12, 0.04], 44] }[kind];   // hall — общий вид зала за меню (ui.js)   // голова на старте до 0.75 — в кадре
+    camera.position.set(...p); controls.target.set(...t); camera.lookAt(...t); camera.fov = fov;
+  }
+  camera.updateProjectionMatrix(); if (camFree) controls.update();
+}
+$('cam').onchange = e => setCam(e.target.value); setCam('video');
+{ const p = $('press'), v = () => { Drive.MECH.PRESS = +p.value; $('pressv').textContent = p.value > 0 ? p.value + ' Н' : 'выкл'; };   // упор по усилию (drive.js MECH.PRESS): 0 — прежний стоп по отклонению руки; &press=N — сразу
+  p.value = new URLSearchParams(location.search).get('press') ?? 0; p.oninput = v; v(); }
+{ const h = $('headmax'), q = new URLSearchParams(location.search), v = () => { const x = +h.value; Drive.MECH.HEAD_MAX = x >= 31 ? 90 : x; $('headmaxv').textContent = x >= 31 ? 'как в зале' : x + '°'; };   // предел качания головы (drive.js MECH.HEAD_MAX): 31 — как в зале; &head=N — сразу, ?case — по умолчанию 2°
+  h.value = q.get('head') ?? (q.has('case') ? 2 : 31); h.oninput = v; v(); }
+const BP = { hold: false, v: [0, 0, 10, 0, 0, 0] };                              // ?dev «поза коробки»: x, y, z см (мир), повороты вокруг x, y, z ° (Эйлер ZYX)
+{ const K = [['x', 'см', -30, 30, 0.1], ['y (вглубь)', 'см', -30, 45, 0.1], ['z (высота)', 'см', -10, 40, 0.1], ['вокруг x', '°', -180, 180, 1], ['вокруг y', '°', -180, 180, 1], ['вокруг z', '°', -180, 180, 1]], inp = [];
+  BP.pose = () => { const Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...BP.v.slice(3).map(a => a * Math.PI / 180), 'ZYX')); return [...BP.v.slice(0, 3).map(v => v / 100), Q.w, Q.x, Q.y, Q.z]; };
+  const show = () => { K.forEach((k, i) => { inp[i].value = BP.v[i]; inp[i].nextSibling.textContent = `${BP.v[i]} ${k[1]}`; }); $('bp_txt').textContent = JSON.stringify(BP.pose().map(v => +v.toFixed(4))); };
+  K.forEach(([n, , lo, hi, s], i) => { const r = document.createElement('div'); r.className = 'row'; r.innerHTML = `<label style="width:74px">${n}</label><input type="range" min="${lo}" max="${hi}" step="${s}" style="width:120px"><span></span>`;
+    inp[i] = r.children[1]; inp[i].oninput = () => { const v = +inp[i].value; if (!BP.hold) { get(); BP.hold = $('bp_hold').checked = true; } BP.v[i] = v; show(); }; inp[i].onchange = () => { BP.hold = $('bp_hold').checked = false; }; $('bp_sl').append(r); });   // тронул ползунок — коробка в руке (с текущей позы), отпустил — падает на прутки
+  const get = () => { const a = J.c.qa, p = d.qpos, E = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(p[a + 4], p[a + 5], p[a + 6], p[a + 3]), 'ZYX');
+    BP.v = [p[a] * 100, p[a + 1] * 100, p[a + 2] * 100, E.x, E.y, E.z].map((v, i) => +(i < 3 ? v : v * 180 / Math.PI).toFixed(i < 3 ? 1 : 0)); show(); };
+  BP.get = get; $('bp_get').onclick = get; $('bp_hold').onchange = e => { if (e.target.checked && !BP.hold) get(); BP.hold = e.target.checked; };
+  $('bp_keep').onclick = () => { const f = Array.from(d.qpos); f.splice(J.c.qa, 7, ...BP.pose()); CASE = { id: S.id, f }; };   // «Новая коробка» (reset) ставит эту позу на этом автомате
+  $('bp_copy').onclick = () => navigator.clipboard?.writeText($('bp_txt').textContent); show(); }
+{ const f = $('floor'); for (const [k, t] of Object.entries(HS.FLOORS)) f.add(new Option(t, k)); f.value = HS.floorNow(); f.onchange = () => HS.setFloor(f.value); }   // пол зала — настройка, выбор помнится (hall_style)
+
+// --- Зал: перелёт камеры к соседнему автомату (LEVELS.md §5.4). Сосед-декор стоит в HS.slot(d) (hall_style), иначе как сейчас: ±2 м вбок, 1.5 м вглубь, ∓0.4 рад
+const FLY_MS = 600, slot = d => HS.slot?.(d) ?? { x: 2.0 * d, y: 1.5, rz: -0.4 * d };
+let fly = null;
+const Hall = window.Hall = {                                                       // API для меню (boxiki-8e): Hall.go(±1), Hall.at(), Hall.ids(); событие 'machine' (detail — id) после смены
+  ids: () => MACHINES.filter(x => x.hall && x.hall === S.hall).map(x => x.id),
+  at: () => S.id,
+  training: () => !!S.train,                                                     // тренировка T-0…T-3 (ECONOMY «Решения 23.10»): ход без жетона, приз — событие 'prize-train'; коробки — на полке, тап — на прутки
+  train(on = true) {                                                             // войти (с текущего автомата, на последнюю коробку тренировки) / выйти обратно; 'machine' не шлём — Save.last остаётся автоматом зала
+    if (fly || (game.s !== 'idle' && !S.train) || on === !!S.train) return false;   // выйти из тренировки — в любой момент (приза и сохранения нет, pick всё сбрасывает; пользователь 23.10 через c6)
+    const M = on ? MACHINES.find(x => x.id === (Hall.tlast ?? 'T-0')) : MACHINES.find(x => x.id === Hall.back) ?? MACHINES.find(x => x.hall === 1);
+    if (on) Hall.back = S.id; pick(M.id, M.box); return true; },
+  trainOpts: () => S.train ? { list: MACHINES.filter(x => x.train).map(x => ({ id: x.id, box: x.box, name: BOXES.find(b => b.id === x.box).name })), now: S.id } : null,
+  async trainPick(id) {                                                          // тап по коробке на полке: полноэкранная (4.4, лимиты — в P.fullscreen), коробка на прутки, прутки — под неё
+    const M = MACHINES.find(x => x.id === id && x.train); if (!S.train || !M || fly) return false;
+    await P.fullscreen(); pick(M.id, M.box); Hall.tlast = M.id; return true; },
+  resetBox() { if (fly || game.s !== 'idle' || S.train) return false; bpose(S.id, null); reset(); return true; },   // пауза: «Сбросить коробку» — исходная поза
+  assistInfo() { return { ok: !!window.ASSIST_TABLE?.[S.id]?.length, n: game.tries - (game.atry ?? 0), need: STAFF ? 0 : S.hall === 1 ? 4 : 6 }; },   // порог «позвать сотрудника»: зал 1 — после 4 ходов, дальше — после 6 (решение пользователя 25.10 через boxiki-93; было 1.5 × ходов до приза по hint_table, 3…12)
+  assist() {                                                                     // сотрудник ставит коробку в одном ходе от приза (assist_table.js: удар в точку — приз ≥ 90 %, пользователь 24.10); бьёт игрок
+    const A = window.ASSIST_TABLE?.[S.id]; if (fly || game.s !== 'idle' || S.train || !A?.length) return false;
+    const s = A[Math.floor(Math.random() * Math.min(3, A.length))];   // из трёх первых («нужно попасть», потом надёжнее) — не одна и та же каждый раз
+    d.qpos.set(s.p, J.c.qa); d.qvel.fill(0, J.c.BV, J.c.BV + 6); mj.mj_forward(m, d); settle(); syncGeoms();
+    if (STAFF) hintMark([d.qpos[J.c.qa] + s.pt[0], d.qpos[J.c.qa + 1] + s.pt[1]]);   // ?staff — сразу метка точки, где приз ≥ 15 из 16
+    game.atry = game.tries; bpose(S.id, { q: Array.from(d.qpos.slice(J.c.qa, J.c.qa + 7), v => +v.toFixed(4)), n: game.tries, a: game.atry }); return true; },   // a — ход последнего вызова: порог сотрудника снова с нуля (звёзды — по n)
+  async trainBox() { if (!S.train || fly) return false; await P.fullscreen(); reset(); return true; },   // «Ещё коробку» после хода/приза: та же коробка заново
+  to(id) {                                                                       // сразу на автомат id из любого зала, без перелёта (меню: кнопки залов, c6 23.10); камера — как есть
+    demoStop(); const M = MACHINES.find(x => x.id === id);
+    if (!M || M.train || fly || S.train || !['idle', 'shut', 'return'].includes(game.s)) return false;
+    if (id === S.id) return true;
+    if (game.s !== 'idle') boxSave(true);
+    if (!window.Save?.get().bpose?.[S.id]) restOne(MACHINES.find(x => x.id === S.id));   // как в flyStep: без bpose (приз) — покой оставленного заново
+    pick(M.id, M.box); syncGeoms(); dispatchEvent(new CustomEvent('machine', { detail: id })); return true; },
+  go(dir) {
+    demoStop();
+    const L = Hall.ids(), id = L[L.indexOf(S.id) + dir];
+    if (!id || fly || !['idle', 'shut', 'return'].includes(game.s) || S.train) return false;   // между ходами (и пока лапа разжалась и едет домой — коробка уже лежит) и внутри зала; тренировка — коробки с полки, не перелёт
+    const { x, y, rz } = slot(dir), c = Math.cos(rz), s = Math.sin(rz), tr = v => new THREE.Vector3(c * v.x - s * v.y + x, s * v.x + c * v.y + y, v.z);
+    fly = { t0: performance.now(), id, p0: camera.position.clone(), q0: camera.quaternion.clone(), tg0: controls.target.clone() };
+    fly.p1 = tr(fly.p0); fly.tg1 = tr(fly.tg0); const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rz); fly.q1 = qz.clone().multiply(fly.q0); fly.ms = FLY_MS;
+    if (fly.p0.y > -0.95) {                                                        // камера внутри корпуса («как на видео»): отъехать к виду спереди → проехать вдоль ряда → подъехать (напрямую — сквозь боковую стенку, по дуге назад — пульты и пол во весь кадр)
+      const pm = new THREE.Vector3(fly.p0.x * 0.3, -1.15, 0.55), qm = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(pm, new THREE.Vector3(0, 0.12, 0.3), camera.up));   // как пресет front
+      fly.curve = new THREE.CatmullRomCurve3([fly.p0, pm, tr(pm), fly.p1], false, 'centripetal'); fly.qm = qm; fly.qm1 = qz.clone().multiply(qm); fly.ms = 1000;
+    }
+    return true;
+  } };
+function flyStep(now) {                                                            // в кадре: плавно к соседу; в конце — его уровень, камера на прежнее место (новый автомат стоит там, где был текущий)
+  fly.tt = (fly.tt ?? 0) + Math.min(34, now - (fly.tl ?? fly.t0)); fly.tl = now;   // время перелёта — не больше 34 мс за кадр: подвис кадр — камера не перескакивает
+  const sm = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); }, k = Math.min(1, fly.tt / fly.ms), e = sm(k);
+  controls.target.lerpVectors(fly.tg0, fly.tg1, e);
+  if (!fly.curve) { camera.position.lerpVectors(fly.p0, fly.p1, e); camera.quaternion.slerpQuaternions(fly.q0, fly.q1, e); }
+  else { camera.position.copy(fly.curve.getPointAt(e));                            // по длине пути; взгляд: к виду спереди за первые 40 %, вдоль ряда держать, к прежнему — за последние 40 %
+    if (e < 0.4) camera.quaternion.slerpQuaternions(fly.q0, fly.qm, sm(e / 0.4)); else if (e < 0.6) camera.quaternion.slerpQuaternions(fly.qm, fly.qm1, sm((e - 0.4) / 0.2)); else camera.quaternion.slerpQuaternions(fly.qm1, fly.q1, sm((e - 0.6) / 0.4)); }
+  deco.fly(camera.position.x - fly.p0.x);                                          // свет автомата едет с камерой; на подмене fit ставит его обратно (hall_style)
+  // ponytail: размытие по скорости (CSS blur холста, пользователь 22.10) снято — давало кадры по 180–220 мс, камера перескакивала (пользователь: «мелькает»); вернуть — только размытием внутри WebGL
+  if (k < 1) return;
+  const f = fly; fly = null; if (game.s !== 'idle') boxSave(true); if (!window.Save?.get().bpose?.[S.id]) restOne(MACHINES.find(x => x.id === S.id));   // оставленный автомат станет соседом: с bpose сосед ставит коробку сам (hall_style a068cc1), без — новая коробка (приз) — покой заново
+  pick(f.id, MACHINES.find(x => x.id === f.id).box); syncGeoms();   // syncGeoms: кадр уже расставил меши до подмены — новые иначе рисуются в позе по умолчанию (голова лапы перед камерой на 1 кадр, пользователь 23.10: «мелькает внутри автомата»)
+  camera.position.copy(f.p0); camera.quaternion.copy(f.q0); controls.target.copy(f.tg0);
+  dispatchEvent(new CustomEvent('machine', { detail: f.id }));
+}
+addEventListener('keydown', e => { const dir = { KeyQ: -1, KeyE: 1, BracketLeft: -1, BracketRight: 1 }[e.code]; if (DEV && dir && !e.repeat) Hall.go(dir); });   // проверка без меню, только ?dev (у игрока — меню; пользователь 23.10): Q / E — соседний автомат
+
+// --- Цикл: шаг физики 2 мс, столько шагов, сколько прошло времени (× скорость)
+let last = performance.now(), acc = 0, tPhys = 0; const FT = [], RES = { vs: 1e9, ceil: DPR_MAX, tFail: -1e9, ok: 0 };   // динамическое разрешение
+const Game = window.Game = { paused: false };                                    // пауза для сборки: SDK Яндекса, реклама, окно паузы — зал не считается и не рисуется
+// --- Простой (пользователь 24.10: «мак греется»): лапа на старте, коробка и лапа в покое ~0,5 с, нет перелёта/демо/подсказки/тренировки — физика стоит, кадр — только если что-то изменилось (поза, камера, экран) или раз в 250 мс (догрузки соседей и текстур)
+let lastF = 0, still = 0, sig0 = '', cam0 = 0, drawn = 0, REST = null;
+for (const e of ['pointerdown', 'wheel', 'keydown', 'resize']) addEventListener(e, () => { still = 0; }, { passive: true });
+addEventListener('pointermove', e => { if (e.buttons) still = 0; }, { passive: true });   // тянут камеру — проснуться сразу
+function quiet() {
+  if (!m || game.s !== 'idle' || fly || DEMO.on || S.train || BP.hold || DEV) return false;
+  if (document.body.dataset.scr === 'menu' && performance.now() > DEMO.next - 200) return false;   // меню: лапа скоро сама пробует коробку
+  if (game.t < 2) return false;                                                  // лапа после возврата ещё качается
+  const q = d.qpos, a = J.c.qa, R0 = REST;                                       // коробка: покой по позе — дребезг контакта на прутках не даёт скорости ниже ~0,1 рад/с, на глаз не виден
+  if (!R0 || Math.hypot(q[a] - R0[0], q[a + 1] - R0[1], q[a + 2] - R0[2]) > 1e-3 || Math.abs(q[a + 3] * R0[3] + q[a + 4] * R0[4] + q[a + 5] * R0[5] + q[a + 6] * R0[6]) < 0.99999) { REST = Array.from(q.slice(a, a + 7)); return false; }   // сдвиг > 1 мм или поворот > 0,5° — заново
+  return true;
+}
+function camS() { const e = camera.matrixWorld.elements; let s = 0; for (let i = 0; i < 16; i++) s += e[i] * (i + 7); return s; }
+function sig() { let s = 0; for (let i = 0; i < d.qpos.length; i++) s += d.qpos[i] * (i + 1); return `${s}|${camS()}|${game.s}|${S.id}|${innerWidth}x${innerHeight}|${DPR}|${document.body.dataset.scr}`; }   // всё, от чего меняется кадр зала
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (Home.on || Game.paused) { last = now; return; }                            // дома или пауза — зал не считается и не рисуется
+  if (now - lastF < 12) return; lastF = now;                                     // не больше 60 кадров/с (экран 120 Гц — каждый второй), пользователь 24.10
+  still = quiet() ? still + 1 : 0;
+  if (still > 30) {                                                              // простой: без физики; изменилось (сотрудник, сброс, другой автомат, камера) — проснуться на 0,5 с, иначе кадр раз в 250 мс
+    if (sig() !== sig0) still = 0;
+    else { last = now; FT.length = 0; if (now - drawn > 250) { renderer.render(scene, camera); drawn = now; } return; } }
+  FT.push(now - last); if (now - last > 4) RES.vs = Math.min(RES.vs, now - last); if (FT.length === 90) { const p95 = FT.sort((a, b) => a - b)[85]; FT.length = 0;   // динамическое разрешение по p95 кадра; RES.vs — такт экрана (самый короткий кадр)
+    if (now > 4000) {                                                                              // первые 4 с — прогрев (шейдеры, текстуры): не судить
+      if (now - RES.tFail > 60000) RES.ceil = DPR_MAX;                                              // уровень, где тормозило, — минуту не пробуем
+      if (p95 > 20 && DPR > 0.75) { RES.ceil = DPR - 0.25; RES.tFail = now; RES.ok = 0; DPR -= 0.25; renderer.setPixelRatio(DPR); }
+      else if (p95 < 1.15 * RES.vs + 1 && DPR < RES.ceil) { if (++RES.ok >= 4) { RES.ok = 0; DPR += 0.25; renderer.setPixelRatio(DPR); } }   // вверх — 4 окна подряд в такт экрану
+      else RES.ok = 0; } }
+  const sp = +$('speed').value; acc = Math.min(acc + (now - last) / 1000 * sp, game?.s === 'replay' ? 0.06 * sp : 0.06); last = now;   // в записи предел растёт со скоростью (×8 — честные ×8)
+  if (m) { const t0 = performance.now(), dt = m.opt.timestep; while (acc >= dt) { physStep(); acc -= dt; } tPhys = 0.9 * tPhys + 0.1 * (performance.now() - t0); syncGeoms(); ui(); }
+  if (fly) flyStep(now);
+  if (camFree) controls.update();
+  renderer.render(scene, camera);                                             // без EffectComposer: родное MSAA холста, bloom снят
+  const c = camS(); if (c !== cam0) still = 0; cam0 = c; sig0 = sig(); drawn = now;   // камера ещё едет (затухание после касания) — не засыпать
+}
+function warm() {                                                              // прогрев под заставкой (boxiki-a3: первые кадры меню 100–150 мс — шейдеры и тени соседей): по кадру в виде зала и хода, потом Game.warm и событие 'warm' (P.ready — после)
+  const k = $('cam').value; if (new URLSearchParams(location.search).has('nowarm')) return; for (const c of ['hall', k]) { setCam(c); renderer.render(scene, camera); } setCam(k);
+  Game.warm = true; dispatchEvent(new Event('warm'));
+}
+try { mj = await loadMujoco(); await load('225'); warm(); performance.mark('game-start'); requestAnimationFrame(frame); } catch (e) { fail(e); }   // квартиру грузит ui.js — в меню, когда ход не идёт (загрузка во время хода — рывки 67–250 мс, замер 23.10)
+</script>
+</body>
+</html>
